@@ -30,14 +30,14 @@ class XsumSmall final {
     explicit XsumSmall();
     ~XsumSmall() = default;
 
-    void addv(const std::span<const double> vec);
-    void add1(double value);
-    double computeRound();
+    void addv(const std::span<const double> vec) const;
+    void add1(double value) const;
+    double computeRound() const;
 
   private:
     struct XsumSmallAccumulator {
         std::array<int64_t, XSUM_SCHUNKS> chunk; // Chunks making up small accumulator
-        int adds_until_propagate;                // Number of remaining adds before carry
+        int addsUntilPropagate;                  // Number of remaining adds before carry
         int64_t Inf;                             // If non-zero, +Inf, -Inf, or NaN
         int64_t NaN;                             // If non-zero, a NaN value with payload
 
@@ -45,9 +45,9 @@ class XsumSmall final {
     };
     std::unique_ptr<XsumSmallAccumulator> sacc;
 
-    void xsum_small_add_inf_nan(int64_t ivalue) const;
-    inline void xsum_add1_no_carry(double value) const;
-    int xsum_carry_propagate() const;
+    void xsumSmallAddInfNan(int64_t ivalue) const;
+    inline void xsumAdd1NoCarry(double value) const;
+    int xsumCarryPropagate() const;
 };
 
 } // namespace XSUM

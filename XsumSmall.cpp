@@ -6,25 +6,25 @@ XsumSmall::XsumSmall() : sacc{std::make_unique<XsumSmallAccumulator>(XSUM_SMALL_
 
 constexpr XsumSmall::XsumSmallAccumulator::XsumSmallAccumulator(const int addsUntilPropagate, const int64_t inf,
                                                                 const int64_t nan)
-    : adds_until_propagate{addsUntilPropagate}, Inf{inf}, NaN{nan} {}
+    : addsUntilPropagate{addsUntilPropagate}, Inf{inf}, NaN{nan} {}
 
 /*
     ADD A VECTOR OF FLOATING-POINT NUMBERS TO A SMALL ACCUMULATOR.  Mixes
-    calls of xsum_carry_propagate with calls of xsum_add1_no_carry.
+    calls of xsumCarryPropagate with calls of xsumAdd1NoCarry.
 */
-void XsumSmall::addv(const std::span<const double> vec) {
+void XsumSmall::addv(const std::span<const double> vec) const {
     size_t offset = 0;
     size_t n = vec.size();
 
     while (0 < n) {
-        if (sacc->adds_until_propagate == 0) {
-            xsum_carry_propagate();
+        if (sacc->addsUntilPropagate == 0) {
+            xsumCarryPropagate();
         }
-        size_t m = std::min(static_cast<int>(n), sacc->adds_until_propagate);
+        size_t m = std::min(static_cast<int>(n), sacc->addsUntilPropagate);
         for (size_t i = 0; i < m; i++) {
-            xsum_add1_no_carry(vec[offset + i]);
+            xsumAdd1NoCarry(vec[offset + i]);
         }
-        sacc->adds_until_propagate -= m;
+        sacc->addsUntilPropagate -= m;
         offset += m;
         n -= m;
     }
@@ -35,12 +35,12 @@ void XsumSmall::addv(const std::span<const double> vec) {
     somewhat faster than, calling xsum_small_addv with a vector of one
     value.
 */
-void XsumSmall::add1(double value) {
-    if (sacc->adds_until_propagate == 0) {
-        xsum_carry_propagate();
+void XsumSmall::add1(double value) const {
+    if (sacc->addsUntilPropagate == 0) {
+        xsumCarryPropagate();
     }
-    xsum_add1_no_carry(value);
-    sacc->adds_until_propagate -= 1;
+    xsumAdd1NoCarry(value);
+    sacc->addsUntilPropagate -= 1;
 }
 
 /*
@@ -49,7 +49,7 @@ void XsumSmall::add1(double value) {
     by this operation (by carry propagation being done), but the value it
     represents should not change.
 */
-double XsumSmall::computeRound() {
+double XsumSmall::computeRound() const {
     /*
         See if we have a NaN from one of the numbers being a NaN, in
         which case we return the NaN with largest payload, or an infinite
@@ -73,12 +73,12 @@ double XsumSmall::computeRound() {
         determined from the uppermost non-zero chunk.
 
         We also find the index, i, of this uppermost non-zero chunk, as
-        the value returned by xsum_carry_propagate, and set ivalue to
+        the value returned by xsumCarryPropagate, and set ivalue to
         sacc->chunk[i].  Note that ivalue will not be 0 or -1, unless
         i is 0 (the lowest chunk), in which case it will be handled by
         the code for denormalized numbers.
     */
-    int i = xsum_carry_propagate();
+    int i = xsumCarryPropagate();
     int64_t ivalue = sacc->chunk[i];
     int64_t intv = 0;
 
@@ -97,7 +97,7 @@ double XsumSmall::computeRound() {
             by 1 here.
         */
         if (i == 0) {
-            intv = ivalue >= 0 ? ivalue : -ivalue;
+            intv = 0 <= ivalue ? ivalue : -ivalue;
             intv >>= 1;
             if (ivalue < 0) {
                 intv |= XSUM_SIGN_MASK;
@@ -175,7 +175,7 @@ double XsumSmall::computeRound() {
         magnitude should be increased by one in the lowest mantissa bit.
     */
     bool shouldRoundAwayFromZero = false;
-    if (ivalue >= 0) { // number is positive, lower bits are added to magnitude
+    if (0 <= ivalue) { // number is positive, lower bits are added to magnitude
         intv = 0;      // positive sign
 
         if ((ivalue & 2) == 0) { // extra bits are 0x
@@ -284,7 +284,7 @@ double XsumSmall::computeRound() {
     being positive.  This ensures that the order of summing NaN values doesn't
     matter.
 */
-void XsumSmall::xsum_small_add_inf_nan(int64_t ivalue) const {
+void XsumSmall::xsumSmallAddInfNan(int64_t ivalue) const {
     int64_t mantissa = ivalue & XSUM_MANTISSA_MASK;
 
     if (mantissa == 0) {      // Inf
@@ -310,7 +310,7 @@ void XsumSmall::xsum_small_add_inf_nan(int64_t ivalue) const {
     and for good performance it must be inlined by the compiler (otherwise the
     procedure call overhead will result in substantial inefficiency).
 */
-inline void XsumSmall::xsum_add1_no_carry(double value) const {
+inline void XsumSmall::xsumAdd1NoCarry(double value) const {
     int64_t ivalue = std::bit_cast<int64_t>(value);
 
     // Extract exponent and mantissa.  Split exponent into high and low parts.
@@ -330,7 +330,7 @@ inline void XsumSmall::xsum_add1_no_carry(double value) const {
         exp = low_exp = 1;
     } else if (exp == XSUM_EXP_MASK) { // Inf or NaN
         // Just update flags in accumulator structure.
-        xsum_small_add_inf_nan(ivalue);
+        xsumSmallAddInfNan(ivalue);
         return;
     } else { // normalized
         // OR in implicit 1 bit at top of mantissa
@@ -361,15 +361,27 @@ inline void XsumSmall::xsum_add1_no_carry(double value) const {
     }
 }
 
-int XsumSmall::xsum_carry_propagate() const {
+/*
+    PROPAGATE CARRIES TO NEXT CHUNK IN A SMALL ACCUMULATOR.  Needs to
+    be called often enough that accumulated carries don't overflow out
+    the top, as indicated by sacc->addsUntilPropagate.  Returns the
+    index of the uppermost non-zero chunk (0 if number is zero).
+
+    After carry propagation, the uppermost non-zero chunk will indicate
+    the sign of the number, and will not be -1 (all 1s).  It will be in
+    the range -2^XSUM_LOW_MANTISSA_BITS to 2^XSUM_LOW_MANTISSA_BITS - 1.
+    Lower chunks will be non-negative, and in the range from 0 up to
+    2^XSUM_LOW_MANTISSA_BITS - 1.
+*/
+int XsumSmall::xsumCarryPropagate() const {
     /*
         Set u to the index of the uppermost non-zero (for now) chunk, or
         return with value 0 if there is none.
     */
     int u = XSUM_SCHUNKS - 1;
-    while (u >= 0 && sacc->chunk[u] == 0) {
+    while (0 <= u && sacc->chunk[u] == 0) {
         if (u == 0) {
-            sacc->adds_until_propagate = XSUM_SMALL_CARRY_TERMS - 1;
+            sacc->addsUntilPropagate = XSUM_SMALL_CARRY_TERMS - 1;
             return 0;
         }
         --u;
@@ -440,7 +452,7 @@ int XsumSmall::xsum_carry_propagate() const {
 
         sacc->chunk[i] = clow;
         if (i + 1 >= XSUM_SCHUNKS) {
-            xsum_small_add_inf_nan((static_cast<int64_t>(XSUM_EXP_MASK) << XSUM_MANTISSA_BITS) | XSUM_MANTISSA_MASK);
+            xsumSmallAddInfNan((static_cast<int64_t>(XSUM_EXP_MASK) << XSUM_MANTISSA_BITS) | XSUM_MANTISSA_MASK);
             u = i;
         } else {
             sacc->chunk[i + 1] += chigh; // note: this could make this chunk be zero
@@ -456,7 +468,7 @@ int XsumSmall::xsum_carry_propagate() const {
     */
     if (uix < 0) {
         uix = 0;
-        sacc->adds_until_propagate = XSUM_SMALL_CARRY_TERMS - 1;
+        sacc->addsUntilPropagate = XSUM_SMALL_CARRY_TERMS - 1;
         return uix;
     }
 
@@ -475,7 +487,7 @@ int XsumSmall::xsum_carry_propagate() const {
         uix -= 1;
     }
 
-    sacc->adds_until_propagate = XSUM_SMALL_CARRY_TERMS - 1;
+    sacc->addsUntilPropagate = XSUM_SMALL_CARRY_TERMS - 1;
     return uix; // Return index of uppermost non-zero chunk
 }
 

@@ -75,11 +75,13 @@ void runTest() {
         sameValue({-Infinity}, -Infinity);
         sameValue({-Infinity, -Infinity}, -Infinity);
 
-        sameValue({}, -0);
-        sameValue({-0}, -0);
-        sameValue({-0, -0}, -0);
-        sameValue({-0, 0}, 0);
-        sameValue({0}, 0);
+        // https://gitlab.com/radfordneal/xsum/-/blob/master/api-doc?ref_type=heads#L203-L206
+        // xsum wont return -0 (negative zero);
+        sameValue({}, 0.0);
+        sameValue({-0.0}, 0.0);
+        sameValue({-0.0, -0.0}, 0.0);
+        sameValue({-0.0, 0.0}, 0.0);
+        sameValue({0.0}, 0.0);
     } catch (const std::string &ex) {
         std::cout << ex << std::endl;
     }
