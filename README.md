@@ -5,6 +5,9 @@ fast exact summation using small and large superaccumulators.
 
 This code include test cases in [TestRunner.cpp](./TestRunner.cpp).
 
+This code is based on [this commit](https://gitlab.com/radfordneal/xsum/-/commit/b766b3e104cdbd6769c8df033fb430700fce32dd)
+from Radford M. Neal's xsum repository.
+
 ## References
 
 - https://arxiv.org/abs/1505.05571
