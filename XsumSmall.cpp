@@ -174,36 +174,31 @@ double XsumSmall::computeRound() {
         order bits is correct, and to round_away_from_zero if instead the
         magnitude should be increased by one in the lowest mantissa bit.
     */
-
+    bool shouldRoundAwayFromZero = false;
     if (ivalue >= 0) { // number is positive, lower bits are added to magnitude
         intv = 0;      // positive sign
 
         if ((ivalue & 2) == 0) { // extra bits are 0x
-            goto done_rounding;
-        }
-
-        if ((ivalue & 1) != 0) { // extra bits are 11
-            goto round_away_from_zero;
-        }
-
-        if ((ivalue & 4) != 0) { // low bit is 1 (odd), extra bits are 10
-            goto round_away_from_zero;
-        }
-
-        if (lower == 0) { // see if any lower bits are non-zero
-            while (j > 0) {
-                j -= 1;
-                if (sacc->chunk[j] != 0) {
-                    lower = 1;
-                    break;
+            // TODO: this is not required,
+            // but removing the branch would change the logic
+            shouldRoundAwayFromZero = false;
+        } else if ((ivalue & 1) != 0) { // extra bits are 11
+            shouldRoundAwayFromZero = true;
+        } else if ((ivalue & 4) != 0) { // low bit is 1 (odd), extra bits are 10
+            shouldRoundAwayFromZero = true;
+        } else {
+            if (lower == 0) { // see if any lower bits are non-zero
+                while (j > 0) {
+                    j -= 1;
+                    if (sacc->chunk[j] != 0) {
+                        lower = 1;
+                        break;
+                    }
                 }
             }
-        }
-
-        if (lower != 0) { // low bit 0 (even), extra bits 10, non-zero lower bits
-            goto round_away_from_zero;
-        } else { // low bit 0 (even), extra bits 10, all lower bits 0
-            goto done_rounding;
+            if (lower != 0) { // low bit 0 (even), extra bits 10, non-zero lower bits
+                shouldRoundAwayFromZero = true;
+            }
         }
     } else { // number is negative, lower bits are subtracted from magnitude
         /*
@@ -228,15 +223,7 @@ double XsumSmall::computeRound() {
         ivalue = -ivalue;      // ivalue now contains the absolute value
 
         if ((ivalue & 3) == 3) { // extra bits are 11
-            goto round_away_from_zero;
-        }
-
-        if ((ivalue & 3) <= 1) { // extra bits are 00 or 01
-            goto done_rounding;
-        }
-
-        if ((ivalue & 4) == 0) { // low bit is 0 (even), extra bits are 10
-            goto done_rounding;
+            shouldRoundAwayFromZero = true;
         }
 
         if (lower == 0) { // see if any lower bits are non-zero
@@ -249,38 +236,30 @@ double XsumSmall::computeRound() {
             }
         }
 
-        if (lower != 0) { // low bit 1 (odd), extra bits 10, non-zero lower bits
-            goto done_rounding;
-        } else { // low bit 1 (odd), extra bits are 10, lower bits are all 0
-            goto round_away_from_zero;
+        if (lower == 0) { // low bit 1 (odd), extra bits are 10, lower bits are all 0
+            shouldRoundAwayFromZero = true;
         }
     }
 
-round_away_from_zero:
-
-    /*
-        Round away from zero, then check for carry having propagated out the
-        top, and shift if so.
-    */
-
-    ivalue += 4; // add 1 to low-order mantissa bit
-    if (ivalue & (static_cast<int64_t>(1) << (XSUM_MANTISSA_BITS + 3))) {
-        ivalue >>= 1;
-        e += 1;
+    if (shouldRoundAwayFromZero) {
+        /*
+            Round away from zero, then check for carry having propagated out the
+            top, and shift if so.
+        */
+        ivalue += 4; // add 1 to low-order mantissa bit
+        if (ivalue & (static_cast<int64_t>(1) << (XSUM_MANTISSA_BITS + 3))) {
+            ivalue >>= 1;
+            e += 1;
+        }
     }
 
-done_rounding:;
-
     // Get rid of the bottom 2 bits that were used to decide on rounding.
-
     ivalue >>= 2;
 
     // Adjust to the true exponent, accounting for where this chunk is.
-
     e += (i << XSUM_LOW_EXP_BITS) - XSUM_EXP_BIAS - XSUM_MANTISSA_BITS;
 
     // If exponent has overflowed, change to plus or minus Inf and return.
-
     if (e >= XSUM_EXP_MASK) {
         intv |= static_cast<int64_t>(XSUM_EXP_MASK) << XSUM_MANTISSA_BITS;
         return std::bit_cast<double>(intv);
@@ -410,8 +389,8 @@ int XsumSmall::xsum_carry_propagate() const {
         Carry propagate, starting at the low-order chunks.  Note that the
         loop limit of u may be increased inside the loop.
     */
-    int i = 0; // set to the index of the next non-zero chunck, from bottom
-    int uix = -1;  // indicates that a non-zero chunk has not been found yet
+    int i = 0;    // set to the index of the next non-zero chunck, from bottom
+    int uix = -1; // indicates that a non-zero chunk has not been found yet
 
     do {
         int64_t c;     // Set to the chunk at index i (next non-zero one)
