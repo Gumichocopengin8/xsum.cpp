@@ -338,13 +338,6 @@ inline void XsumSmall::xsum_add1_no_carry(double value) const {
     }
 
     /*
-        Use high part of exponent as index of chunk, and low part of
-        exponent to give position within chunk.  Fetch the two chunks
-        that will be modified.
-    */
-    int64_t *chunk_ptr = sacc->chunk.data() + high_exp;
-
-    /*
         Separate mantissa into two parts, after shifting, and add to (or
         subtract from) this chunk and the next higher chunk (which always
         exists since there are three extra ones at the top).
@@ -360,11 +353,11 @@ inline void XsumSmall::xsum_add1_no_carry(double value) const {
 
     // Add to, or subtract from, the two affected chunks.
     if (ivalue < 0) {
-        chunk_ptr[0] -= split_mantissa[0];
-        chunk_ptr[1] -= split_mantissa[1];
+        sacc->chunk[high_exp] -= split_mantissa[0];
+        sacc->chunk[high_exp + 1] -= split_mantissa[1];
     } else {
-        chunk_ptr[0] += split_mantissa[0];
-        chunk_ptr[1] += split_mantissa[1];
+        sacc->chunk[high_exp] += split_mantissa[0];
+        sacc->chunk[high_exp + 1] += split_mantissa[1];
     }
 }
 
