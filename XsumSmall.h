@@ -28,6 +28,7 @@ constexpr int64_t XSUM_SMALL_CARRY_TERMS = (1 << XSUM_SMALL_CARRY_BITS) - 1; // 
 class XsumSmall final {
   public:
     explicit XsumSmall();
+    ~XsumSmall() = default;
 
     void addv(const std::span<const double> vec);
     void add1(double value);

@@ -7,4 +7,6 @@ add_executable(
   main.cpp
   XsumSmall.cpp
   XsumSmall.h
+  TestRunner.cpp
+  TestRunner.h
 )
