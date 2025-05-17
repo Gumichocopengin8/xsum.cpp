@@ -10,7 +10,7 @@ from Radford M. Neal's xsum repository.
 
 ## Note
 
-- xsum wont return -0 (negative zero);
+- xsum wont return `-0` (negative zero), however, this handle `-0`. See test cases in [TestRunner.cpp](./TestRunner.cpp).
   - https://gitlab.com/radfordneal/xsum/-/blob/master/api-doc?ref_type=heads#L203-L206
 
 ## References

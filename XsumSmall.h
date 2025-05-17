@@ -30,8 +30,8 @@ class XsumSmall final {
     explicit XsumSmall();
     ~XsumSmall() = default;
 
-    void addv(const std::span<const double> vec) const;
-    void add1(double value) const;
+    void addv(const std::span<const double> vec);
+    void add1(double value);
     double computeRound() const;
 
   private:
@@ -43,11 +43,14 @@ class XsumSmall final {
 
         explicit constexpr XsumSmallAccumulator(const int addsUntilPropagate, const int64_t inf, const int64_t nan);
     };
-    std::unique_ptr<XsumSmallAccumulator> sacc;
+    std::unique_ptr<XsumSmallAccumulator> m_sacc;
+    size_t m_sizeCount;
+    bool m_hasPosNumber;
 
     void xsumSmallAddInfNan(int64_t ivalue) const;
     inline void xsumAdd1NoCarry(double value) const;
     int xsumCarryPropagate() const;
+    void incrementWhenValueAdded(double value);
 };
 
 } // namespace XSUM
