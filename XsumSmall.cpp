@@ -36,7 +36,7 @@ void XsumSmall::addv(const std::span<const double> vec) {
     somewhat faster than, calling xsum_small_addv with a vector of one
     value.
 */
-void XsumSmall::add1(double value) {
+void XsumSmall::add1(const double value) {
     incrementWhenValueAdded(value);
     if (m_sacc.addsUntilPropagate == 0) {
         xsumCarryPropagate();
@@ -85,7 +85,7 @@ double XsumSmall::computeRound() {
         i is 0 (the lowest chunk), in which case it will be handled by
         the code for denormalized numbers.
     */
-    int i = xsumCarryPropagate();
+    const int i = xsumCarryPropagate();
     int64_t ivalue = m_sacc.chunk[i];
     int64_t intv = 0;
 
@@ -141,7 +141,7 @@ double XsumSmall::computeRound() {
         more bits are shifted into the bottom later on.
     */
 
-    double fltv = static_cast<double>(ivalue); // finds position of topmost 1 bit of |ivalue|
+    const double fltv = static_cast<double>(ivalue); // finds position of topmost 1 bit of |ivalue|
     intv = std::bit_cast<int64_t>(fltv);
     int e = (intv >> XSUM_MANTISSA_BITS) & XSUM_EXP_MASK; // e-bias is in 0..32
     int more = 2 + XSUM_MANTISSA_BITS + XSUM_EXP_BIAS - e;
@@ -291,8 +291,8 @@ double XsumSmall::computeRound() {
     being positive.  This ensures that the order of summing NaN values doesn't
     matter.
 */
-void XsumSmall::xsumSmallAddInfNan(int64_t ivalue) {
-    int64_t mantissa = ivalue & XSUM_MANTISSA_MASK;
+void XsumSmall::xsumSmallAddInfNan(const int64_t ivalue) {
+    const int64_t mantissa = ivalue & XSUM_MANTISSA_MASK;
 
     if (mantissa == 0) {       // Inf
         if (m_sacc.Inf == 0) { // no previous Inf
@@ -317,13 +317,13 @@ void XsumSmall::xsumSmallAddInfNan(int64_t ivalue) {
     and for good performance it must be inlined by the compiler (otherwise the
     procedure call overhead will result in substantial inefficiency).
 */
-inline void XsumSmall::xsumAdd1NoCarry(double value) {
-    int64_t ivalue = std::bit_cast<int64_t>(value);
+inline void XsumSmall::xsumAdd1NoCarry(const double value) {
+    const int64_t ivalue = std::bit_cast<int64_t>(value);
 
     // Extract exponent and mantissa.  Split exponent into high and low parts.
     int_fast16_t exp = (ivalue >> XSUM_MANTISSA_BITS) & XSUM_EXP_MASK;
     int64_t mantissa = ivalue & XSUM_MANTISSA_MASK;
-    int_fast16_t highExp = exp >> XSUM_LOW_EXP_BITS;
+    const int_fast16_t highExp = exp >> XSUM_LOW_EXP_BITS;
     int_fast16_t lowExp = exp & XSUM_LOW_EXP_MASK;
 
     /* Categorize number as normal, denormalized, or Inf/NaN according to
@@ -354,17 +354,17 @@ inline void XsumSmall::xsumAdd1NoCarry(double value) {
         even though the high mantissa includes the extra implicit 1 bit, it will
         also be shifted right by at least one bit.
     */
-    std::array<int64_t, 2> split_mantissa;
-    split_mantissa[0] = (static_cast<uint64_t>(mantissa) << lowExp) & XSUM_LOW_MANTISSA_MASK;
-    split_mantissa[1] = mantissa >> (XSUM_LOW_MANTISSA_BITS - lowExp);
+    const std::array<int64_t, 2> splitMantissa{
+        static_cast<int64_t>((static_cast<uint64_t>(mantissa) << lowExp) & XSUM_LOW_MANTISSA_MASK),
+        mantissa >> (XSUM_LOW_MANTISSA_BITS - lowExp)};
 
     // Add to, or subtract from, the two affected chunks.
     if (ivalue < 0) {
-        m_sacc.chunk[highExp] -= split_mantissa[0];
-        m_sacc.chunk[highExp + 1] -= split_mantissa[1];
+        m_sacc.chunk[highExp] -= splitMantissa[0];
+        m_sacc.chunk[highExp + 1] -= splitMantissa[1];
     } else {
-        m_sacc.chunk[highExp] += split_mantissa[0];
-        m_sacc.chunk[highExp + 1] += split_mantissa[1];
+        m_sacc.chunk[highExp] += splitMantissa[0];
+        m_sacc.chunk[highExp + 1] += splitMantissa[1];
     }
 }
 
@@ -502,7 +502,7 @@ int XsumSmall::xsumCarryPropagate() {
     Increment m_sizeCount and check positive value every time when value is added.
     This is needed to return -0 (negative zero) if applicable.
 */
-inline void XsumSmall::incrementWhenValueAdded(double value) {
+inline void XsumSmall::incrementWhenValueAdded(const double value) {
     m_sizeCount++;
     m_hasPosNumber = m_hasPosNumber || !std::signbit(value);
 }
