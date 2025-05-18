@@ -25,6 +25,15 @@ constexpr int64_t XSUM_LOW_MANTISSA_MASK = (static_cast<int64_t>(1) << XSUM_LOW_
 constexpr int64_t XSUM_SMALL_CARRY_BITS = (XSUM_SCHUNK_BITS - 1) - XSUM_MANTISSA_BITS; // Bits sums can carry into
 constexpr int64_t XSUM_SMALL_CARRY_TERMS = (1 << XSUM_SMALL_CARRY_BITS) - 1; // # terms can add before need prop.
 
+struct XsumSmallAccumulator {
+    std::vector<int64_t> chunk; // Chunks making up small accumulator
+    int addsUntilPropagate;     // Number of remaining adds before carry
+    int64_t Inf;                // If non-zero, +Inf, -Inf, or NaN
+    int64_t NaN;                // If non-zero, a NaN value with payload
+
+    explicit constexpr XsumSmallAccumulator(const int addsUntilPropagate, const int64_t inf, const int64_t nan);
+};
+
 class XsumSmall final {
   public:
     explicit XsumSmall();
@@ -32,25 +41,17 @@ class XsumSmall final {
 
     void addv(const std::span<const double> vec);
     void add1(double value);
-    double computeRound() const;
+    double computeRound();
 
   private:
-    struct XsumSmallAccumulator {
-        std::array<int64_t, XSUM_SCHUNKS> chunk; // Chunks making up small accumulator
-        int addsUntilPropagate;                  // Number of remaining adds before carry
-        int64_t Inf;                             // If non-zero, +Inf, -Inf, or NaN
-        int64_t NaN;                             // If non-zero, a NaN value with payload
-
-        explicit constexpr XsumSmallAccumulator(const int addsUntilPropagate, const int64_t inf, const int64_t nan);
-    };
-    std::unique_ptr<XsumSmallAccumulator> m_sacc;
+    XsumSmallAccumulator m_sacc;
     size_t m_sizeCount;
     bool m_hasPosNumber;
 
-    void xsumSmallAddInfNan(int64_t ivalue) const;
-    inline void xsumAdd1NoCarry(double value) const;
-    int xsumCarryPropagate() const;
-    void incrementWhenValueAdded(double value);
+    void xsumSmallAddInfNan(int64_t ivalue);
+    inline void xsumAdd1NoCarry(double value);
+    int xsumCarryPropagate();
+    inline void incrementWhenValueAdded(double value);
 };
 
 } // namespace XSUM
