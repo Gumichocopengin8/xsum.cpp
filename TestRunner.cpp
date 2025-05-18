@@ -21,10 +21,10 @@ void runTest() {
     try {
         sameValue({1, 2, 3}, 6);
         sameValue({1e308}, 1e308);
-        sameValue({1e308, -1e308}, 0);
+        sameValue({1e308, -1e308}, 0.0);
         sameValue({0.1}, 0.1);
         sameValue({0.1, 0.1}, 0.2);
-        sameValue({0.1, -0.1}, 0);
+        sameValue({0.1, -0.1}, 0.0);
         sameValue({1e308, 1e308, 0.1, 0.1, 1e30, 0.1, -1e30, -1e308, -1e308}, 0.30000000000000004);
         sameValue({1e20, 0.1, -1e20, 1e20, 0.1, -1e20, 1e20, 0.1, -1e20}, 0.30000000000000004);
         sameValue({1e30, 0.1, -1e30}, 0.1);
