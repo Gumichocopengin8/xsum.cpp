@@ -2,6 +2,8 @@
 
 namespace Test {
 
+namespace {
+
 void sameValue(const std::vector<double> vec, double expected) {
     XSUM::XsumSmall xsmall;
     xsmall.addv(vec);
@@ -13,6 +15,8 @@ void sameValue(const std::vector<double> vec, double expected) {
         throw std::format("Bad result: {}! Expected value: {}", res, expected);
     }
 }
+
+} // namespace
 
 void runTest() {
     const double Infinity = std::numeric_limits<double>::infinity();
