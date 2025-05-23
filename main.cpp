@@ -12,6 +12,9 @@ int main() {
     XSUM::XsumLarge xlarge;
     xlarge.addv(vec);
     std::cout << "XsumLarge: " << xlarge.computeRound() << std::endl;
+    XSUM::XsumAuto xauto;
+    xauto.addv(vec);
+    std::cout << "XsumAuto: " << xauto.computeRound() << std::endl;
     Test::runTest();
     return 0;
 }

@@ -28,18 +28,18 @@ constexpr int64_t XSUM_SMALL_CARRY_TERMS = (1 << XSUM_SMALL_CARRY_BITS) - 1; // 
 constexpr int64_t XSUM_LCOUNT_BITS = 64 - XSUM_MANTISSA_BITS; // # of bits in count
 constexpr int64_t XSUM_LCHUNKS = 1 << (XSUM_EXP_BITS + 1);    // # of chunks in large accumulator
 
-} // namespace
+// CONSTANTS DEFINING THE XsumAuto
+constexpr size_t XSUM_THRESHOLD = 1000;
 
 // XsumSmallAccumulator
-
-constexpr XsumSmallAccumulator::XsumSmallAccumulator(const int addsUntilPropagate, const int64_t inf, const int64_t nan)
-    : m_chunk(XSUM_SCHUNKS, 0ll), m_addsUntilPropagate{addsUntilPropagate}, m_Inf{inf}, m_NaN{nan}, m_sizeCount{0},
+XsumSmallAccumulator::XsumSmallAccumulator()
+    : m_chunk(XSUM_SCHUNKS, 0LL), m_addsUntilPropagate{XSUM_SMALL_CARRY_TERMS}, m_Inf{0}, m_NaN{0}, m_sizeCount{0},
       m_hasPosNumber{false} {}
 
-constexpr XsumSmallAccumulator::XsumSmallAccumulator(const std::span<const int64_t> chunk, const int addsUntilPropagate,
-                                                     const int64_t inf, const int64_t nan, const size_t sizeCount,
-                                                     const bool hasPosNumber)
-    : m_chunk(chunk.begin(), chunk.end()), m_addsUntilPropagate{addsUntilPropagate}, m_Inf{inf}, m_NaN{nan},
+XsumSmallAccumulator::XsumSmallAccumulator(std::vector<int64_t> &&chunk, const int addsUntilPropagate,
+                                           const int64_t inf, const int64_t nan, const size_t sizeCount,
+                                           const bool hasPosNumber)
+    : m_chunk(std::move(chunk)), m_addsUntilPropagate{addsUntilPropagate}, m_Inf{inf}, m_NaN{nan},
       m_sizeCount{sizeCount}, m_hasPosNumber{hasPosNumber} {}
 
 /*
@@ -51,7 +51,7 @@ constexpr XsumSmallAccumulator::XsumSmallAccumulator(const std::span<const int64
     being positive.  This ensures that the order of summing NaN values doesn't
     matter.
 */
-void XsumSmallAccumulator::xsumSmallAddInfNan(const int64_t ivalue) {
+void XsumSmallAccumulator::addInfNan(const int64_t ivalue) {
     const int64_t mantissa = ivalue & XSUM_MANTISSA_MASK;
 
     if (mantissa == 0) {  // Inf
@@ -83,7 +83,7 @@ void XsumSmallAccumulator::xsumSmallAddInfNan(const int64_t ivalue) {
     Lower chunks will be non-negative, and in the range from 0 up to
     2^XSUM_LOW_MANTISSA_BITS - 1.
 */
-int XsumSmallAccumulator::xsumCarryPropagate() {
+int XsumSmallAccumulator::carryPropagate() {
     // Set u to the index of the uppermost non-zero (for now) chunk, or
     // return with value 0 if there is none.
     int u = XSUM_SCHUNKS - 1;
@@ -154,7 +154,7 @@ int XsumSmallAccumulator::xsumCarryPropagate() {
 
         m_chunk[i] = clow;
         if (i + 1 >= XSUM_SCHUNKS) {
-            this->xsumSmallAddInfNan((static_cast<int64_t>(XSUM_EXP_MASK) << XSUM_MANTISSA_BITS) | XSUM_MANTISSA_MASK);
+            this->addInfNan((static_cast<int64_t>(XSUM_EXP_MASK) << XSUM_MANTISSA_BITS) | XSUM_MANTISSA_MASK);
             u = i;
         } else {
             m_chunk[i + 1] += chigh; // note: this could make this chunk be zero
@@ -188,6 +188,61 @@ int XsumSmallAccumulator::xsumCarryPropagate() {
 }
 
 /*
+    ADD ONE NUMBER TO A SMALL ACCUMULATOR ASSUMING NO CARRY PROPAGATION REQ'D.
+    This function is declared INLINE regardless of the setting of INLINE_SMALL
+    and for good performance it must be inlined by the compiler (otherwise the
+    procedure call overhead will result in substantial inefficiency).
+*/
+inline void XsumSmallAccumulator::add1NoCarry(const double value) {
+    const int64_t ivalue = std::bit_cast<int64_t>(value);
+
+    // Extract exponent and mantissa.  Split exponent into high and low parts.
+    int_fast16_t exp = (ivalue >> XSUM_MANTISSA_BITS) & XSUM_EXP_MASK;
+    int64_t mantissa = ivalue & XSUM_MANTISSA_MASK;
+    const int_fast16_t highExp = exp >> XSUM_LOW_EXP_BITS;
+    int_fast16_t lowExp = exp & XSUM_LOW_EXP_MASK;
+
+    // Categorize number as normal, denormalized, or Inf/NaN according to
+    // the value of the exponent field.
+    if (exp == 0) { // zero or denormalized
+        // If it's a zero (positive or negative), we do nothing.
+        if (mantissa == 0) {
+            return;
+        }
+        // Denormalized mantissa has no implicit 1, but exponent is 1 not 0.
+        exp = lowExp = 1;
+    } else if (exp == XSUM_EXP_MASK) { // Inf or NaN
+        // Just update flags in accumulator structure.
+        this->addInfNan(ivalue);
+        return;
+    } else { // normalized
+        // OR in implicit 1 bit at top of mantissa
+        mantissa |= static_cast<int64_t>(1) << XSUM_MANTISSA_BITS;
+    }
+
+    // Separate mantissa into two parts, after shifting, and add to (or
+    // subtract from) this chunk and the next higher chunk (which always
+    // exists since there are three extra ones at the top).
+
+    // Note that low_mantissa will have at most XSUM_LOW_MANTISSA_BITS bits,
+    // while high_mantissa will have at most XSUM_MANTISSA_BITS bits, since
+    // even though the high mantissa includes the extra implicit 1 bit, it will
+    // also be shifted right by at least one bit.
+    const std::array<int64_t, 2> splitMantissa{
+        static_cast<int64_t>((static_cast<uint64_t>(mantissa) << lowExp) & XSUM_LOW_MANTISSA_MASK),
+        mantissa >> (XSUM_LOW_MANTISSA_BITS - lowExp)};
+
+    // Add to, or subtract from, the two affected chunks.
+    if (ivalue < 0) {
+        m_chunk[highExp] -= splitMantissa[0];
+        m_chunk[highExp + 1] -= splitMantissa[1];
+    } else {
+        m_chunk[highExp] += splitMantissa[0];
+        m_chunk[highExp + 1] += splitMantissa[1];
+    }
+}
+
+/*
 Increment m_sizeCount and check positive value every time when value is added.
 This is needed to return -0 (negative zero) if applicable.
 */
@@ -196,16 +251,216 @@ inline void XsumSmallAccumulator::incrementWhenValueAdded(const double value) {
     m_hasPosNumber = m_hasPosNumber || !std::signbit(value);
 }
 
+// XsumLargeAccumulator
+
+XsumLargeAccumulator::XsumLargeAccumulator()
+    : m_chunk(XSUM_LCHUNKS), m_count(XSUM_LCHUNKS, -1), m_chunksUsed(XSUM_LCHUNKS / 64, 0), m_usedUsed{0}, m_sacc{} {}
+
+/*
+    ADD CHUNK FROM A LARGE ACCUMULATOR TO THE SMALL ACCUMULATOR WITHIN IT.
+    The large accumulator chunk to add is indexed by ix.  This chunk will
+    be cleared to zero and its count reset after it has been added to the
+    small accumulator (except no add is done for a new chunk being initialized).
+    This procedure should not be called for the special chunks correspnding to
+    Inf or NaN, whose counts should always remain at -1.
+*/
+void XsumLargeAccumulator::addLchunkToSmall(int_fast16_t ix) {
+    const int_fast16_t count = m_count[ix];
+
+    // Add to the small accumulator only if the count is not -1, which
+    // indicates a chunk that contains nothing yet.
+    if (count >= 0) {
+        // Propagate carries in the small accumulator if necessary.
+        if (m_sacc.m_addsUntilPropagate == 0) {
+            m_sacc.carryPropagate();
+        }
+
+        // Get the chunk we will add.  Note that this chunk is the integer sum
+        // of entire 64-bit floating-point representations, with sign, exponent,
+        // and mantissa, but we want only the sum of the mantissas.
+        uint64_t chunk = m_chunk[ix];
+
+        // If we added the maximum number of values to 'chunk', the sum of
+        // the sign and exponent parts (all the same, equal to the index) will
+        // have overflowed out the top, leaving only the sum of the mantissas.
+        // If the count of how many more terms we could have summed is greater
+        // than zero, we therefore add this count times the index (shifted to
+        // the position of the sign and exponent) to get the unwanted bits to
+        // overflow out the top.
+        if (count > 0) {
+            chunk += static_cast<uint64_t>(count * ix) << XSUM_MANTISSA_BITS;
+        }
+
+        // Find the exponent for this chunk from the low bits of the index,
+        // and split it into low and high parts, for accessing the small
+        // accumulator.  Noting that for denormalized numbers where the
+        // exponent part is zero, the actual exponent is 1 (before subtracting
+        // the bias), not zero.
+        int_fast16_t exp = ix & XSUM_EXP_MASK;
+        int_fast16_t lowExp = exp & XSUM_LOW_EXP_MASK;
+        int_fast16_t highExp = exp >> XSUM_LOW_EXP_BITS;
+        if (exp == 0) {
+            lowExp = 1;
+            highExp = 0;
+        }
+
+        // Split the mantissa into three parts, for three consecutive chunks in
+        // the small accumulator.  Except for denormalized numbers, add in the sum
+        // of all the implicit 1 bits that are above the actual mantissa bits.
+        uint64_t lowChunk = (chunk << lowExp) & XSUM_LOW_MANTISSA_MASK;
+        uint64_t midChunk = chunk >> (XSUM_LOW_MANTISSA_BITS - lowExp);
+        if (exp != 0) { // normalized
+            midChunk += static_cast<uint64_t>((1 << XSUM_LCOUNT_BITS) - count)
+                        << (XSUM_MANTISSA_BITS - XSUM_LOW_MANTISSA_BITS + lowExp);
+        }
+        uint64_t highChunk = midChunk >> XSUM_LOW_MANTISSA_BITS;
+        midChunk &= XSUM_LOW_MANTISSA_MASK;
+
+        // Add or subtract the three parts of the mantissa from three small
+        // accumulator chunks, according to the sign that is part of the index.
+        if (ix & (1 << XSUM_EXP_BITS)) {
+            m_sacc.m_chunk[highExp] -= lowChunk;
+            m_sacc.m_chunk[highExp + 1] -= midChunk;
+            m_sacc.m_chunk[highExp + 2] -= highChunk;
+        } else {
+            m_sacc.m_chunk[highExp] += lowChunk;
+            m_sacc.m_chunk[highExp + 1] += midChunk;
+            m_sacc.m_chunk[highExp + 2] += highChunk;
+        }
+
+        // The above additions/subtractions reduce by one the number we can
+        // do before we need to do carry propagation again.
+        m_sacc.m_addsUntilPropagate -= 1;
+    }
+
+    // We now clear the chunk to zero, and set the count to the number
+    // of adds we can do before the mantissa would overflow.  We also
+    // set the bit in chunks_used to indicate that this chunk is in use
+    // (if that is enabled).
+    m_chunk[ix] = 0;
+    m_count[ix] = 1 << XSUM_LCOUNT_BITS;
+    m_chunksUsed[ix >> 6] |= static_cast<uint64_t>(1) << (ix & 0x3f);
+    m_usedUsed |= static_cast<uint64_t>(1) << (ix >> 6);
+}
+
+/*
+    ADD A CHUNK TO THE LARGE ACCUMULATOR OR PROCESS NAN OR INF.  This routine
+    is called when the count for a chunk is negative after decrementing, which
+    indicates either inf/nan, or that the chunk has not been initialized, or
+    that the chunk needs to be transferred to the small accumulator.
+*/
+void XsumLargeAccumulator::largeAddValueInfNan(int_fast16_t ix, uint64_t uintv) {
+    if ((ix & XSUM_EXP_MASK) == XSUM_EXP_MASK) {
+        m_sacc.addInfNan(uintv);
+    } else {
+        this->addLchunkToSmall(ix);
+        m_count[ix] -= 1;
+        m_chunk[ix] += uintv;
+    }
+}
+
+/*
+    TRANSFER ALL CHUNKS IN LARGE ACCUMULATOR TO ITS SMALL ACCUMULATOR.
+*/
+void XsumLargeAccumulator::transferToSmall() {
+    size_t p = 0;
+    size_t chunksUsedSize = m_chunksUsed.size();
+
+    // Very quickly skip some unused low-order blocks of chunks by looking
+    // at the m_usedUsed flags.
+    uint64_t uu = m_usedUsed;
+    if ((uu & 0xffffffff) == 0) {
+        uu >>= 32;
+        p += 32;
+    }
+    if ((uu & 0xffff) == 0) {
+        uu >>= 16;
+        p += 16;
+    }
+    if ((uu & 0xff) == 0) {
+        p += 8;
+    }
+
+    // Loop over remaining blocks of chunks.
+    uint64_t u = m_chunksUsed[p];
+    do {
+        // Loop to quickly find the next non-zero block of used flags,
+        // or finish up if we've added all the used blocks to the small accumulator.
+        for (;;) {
+            u = m_chunksUsed[p];
+            if (u != 0) {
+                break;
+            }
+            p += 1;
+            if (p == chunksUsedSize) {
+                return;
+            }
+            u = m_chunksUsed[p];
+            if (u != 0) {
+                break;
+            }
+            p += 1;
+            if (p == chunksUsedSize) {
+                return;
+            }
+            u = m_chunksUsed[p];
+            if (u != 0) {
+                break;
+            }
+            p += 1;
+            if (p == chunksUsedSize) {
+                return;
+            }
+            u = m_chunksUsed[p];
+            if (u != 0) {
+                break;
+            }
+            p += 1;
+            if (p == chunksUsedSize) {
+                return;
+            }
+        }
+
+        // Find and process the chunks in this block that are used.  We skip
+        // forward based on the m_chunksUsed flags until we're within eight
+        // bits of a chunk that is in use.
+        int ix = p << 6;
+        if ((u & 0xffffffff) == 0) {
+            u >>= 32;
+            ix += 32;
+        }
+        if ((u & 0xffff) == 0) {
+            u >>= 16;
+            ix += 16;
+        }
+        if ((u & 0xff) == 0) {
+            u >>= 8;
+            ix += 8;
+        }
+
+        do {
+            if (m_count[ix] >= 0) {
+                this->addLchunkToSmall(ix);
+            }
+            ix += 1;
+            u >>= 1;
+        } while (u != 0);
+        p += 1;
+    } while (p != chunksUsedSize);
+}
+
+} // namespace
+
 // XsumSmall
 
-XsumSmall::XsumSmall() : m_sacc{XSUM_SMALL_CARRY_TERMS, 0, 0} {}
+XsumSmall::XsumSmall() : m_sacc{} {}
 
 XsumSmall::XsumSmall(XsumSmallAccumulator sacc)
-    : m_sacc{sacc.m_chunk, sacc.m_addsUntilPropagate, sacc.m_Inf, sacc.m_NaN, sacc.m_sizeCount, sacc.m_hasPosNumber} {}
+    : m_sacc{std::move(sacc.m_chunk), sacc.m_addsUntilPropagate, sacc.m_Inf, sacc.m_NaN, sacc.m_sizeCount, sacc.m_hasPosNumber} {}
 
 /*
     ADD A VECTOR OF FLOATING-POINT NUMBERS TO A SMALL ACCUMULATOR.  Mixes
-    calls of xsumCarryPropagate with calls of xsumAdd1NoCarry.
+    calls of carryPropagate with calls of add1NoCarry.
 */
 void XsumSmall::addv(const std::span<const double> vec) {
     size_t offset = 0;
@@ -213,13 +468,13 @@ void XsumSmall::addv(const std::span<const double> vec) {
 
     while (0 < n) {
         if (m_sacc.m_addsUntilPropagate == 0) {
-            m_sacc.xsumCarryPropagate();
+            m_sacc.carryPropagate();
         }
         size_t m = std::min(static_cast<int>(n), m_sacc.m_addsUntilPropagate);
         for (size_t i = 0; i < m; i++) {
             const double value = vec[offset + i];
             m_sacc.incrementWhenValueAdded(value);
-            xsumAdd1NoCarry(value);
+            m_sacc.add1NoCarry(value);
         }
         m_sacc.m_addsUntilPropagate -= m;
         offset += m;
@@ -235,9 +490,9 @@ void XsumSmall::addv(const std::span<const double> vec) {
 void XsumSmall::add1(const double value) {
     m_sacc.incrementWhenValueAdded(value);
     if (m_sacc.m_addsUntilPropagate == 0) {
-        m_sacc.xsumCarryPropagate();
+        m_sacc.carryPropagate();
     }
-    xsumAdd1NoCarry(value);
+    m_sacc.add1NoCarry(value);
     m_sacc.m_addsUntilPropagate -= 1;
 }
 
@@ -273,11 +528,11 @@ double XsumSmall::computeRound() {
     // determined from the uppermost non-zero chunk.
 
     // We also find the index, i, of this uppermost non-zero chunk, as
-    // the value returned by xsumCarryPropagate, and set ivalue to
+    // the value returned by carryPropagate, and set ivalue to
     // m_sacc.chunk[i].  Note that ivalue will not be 0 or -1, unless
     // i is 0 (the lowest chunk), in which case it will be handled by
     // the code for denormalized numbers.
-    const int i = m_sacc.xsumCarryPropagate();
+    const int i = m_sacc.carryPropagate();
     int64_t ivalue = m_sacc.m_chunk[i];
     int64_t intv = 0;
 
@@ -459,170 +714,6 @@ double XsumSmall::computeRound() {
     return std::bit_cast<double>(intv);
 }
 
-/*
-    ADD ONE NUMBER TO A SMALL ACCUMULATOR ASSUMING NO CARRY PROPAGATION REQ'D.
-    This function is declared INLINE regardless of the setting of INLINE_SMALL
-    and for good performance it must be inlined by the compiler (otherwise the
-    procedure call overhead will result in substantial inefficiency).
-*/
-inline void XsumSmall::xsumAdd1NoCarry(const double value) {
-    const int64_t ivalue = std::bit_cast<int64_t>(value);
-
-    // Extract exponent and mantissa.  Split exponent into high and low parts.
-    int_fast16_t exp = (ivalue >> XSUM_MANTISSA_BITS) & XSUM_EXP_MASK;
-    int64_t mantissa = ivalue & XSUM_MANTISSA_MASK;
-    const int_fast16_t highExp = exp >> XSUM_LOW_EXP_BITS;
-    int_fast16_t lowExp = exp & XSUM_LOW_EXP_MASK;
-
-    // Categorize number as normal, denormalized, or Inf/NaN according to
-    // the value of the exponent field.
-    if (exp == 0) { // zero or denormalized
-        // If it's a zero (positive or negative), we do nothing.
-        if (mantissa == 0) {
-            return;
-        }
-        // Denormalized mantissa has no implicit 1, but exponent is 1 not 0.
-        exp = lowExp = 1;
-    } else if (exp == XSUM_EXP_MASK) { // Inf or NaN
-        // Just update flags in accumulator structure.
-        m_sacc.xsumSmallAddInfNan(ivalue);
-        return;
-    } else { // normalized
-        // OR in implicit 1 bit at top of mantissa
-        mantissa |= static_cast<int64_t>(1) << XSUM_MANTISSA_BITS;
-    }
-
-    // Separate mantissa into two parts, after shifting, and add to (or
-    // subtract from) this chunk and the next higher chunk (which always
-    // exists since there are three extra ones at the top).
-
-    // Note that low_mantissa will have at most XSUM_LOW_MANTISSA_BITS bits,
-    // while high_mantissa will have at most XSUM_MANTISSA_BITS bits, since
-    // even though the high mantissa includes the extra implicit 1 bit, it will
-    // also be shifted right by at least one bit.
-    const std::array<int64_t, 2> splitMantissa{
-        static_cast<int64_t>((static_cast<uint64_t>(mantissa) << lowExp) & XSUM_LOW_MANTISSA_MASK),
-        mantissa >> (XSUM_LOW_MANTISSA_BITS - lowExp)};
-
-    // Add to, or subtract from, the two affected chunks.
-    if (ivalue < 0) {
-        m_sacc.m_chunk[highExp] -= splitMantissa[0];
-        m_sacc.m_chunk[highExp + 1] -= splitMantissa[1];
-    } else {
-        m_sacc.m_chunk[highExp] += splitMantissa[0];
-        m_sacc.m_chunk[highExp + 1] += splitMantissa[1];
-    }
-}
-
-// XsumLargeAccumulator
-
-constexpr XsumLargeAccumulator::XsumLargeAccumulator()
-    : m_chunk(XSUM_LCHUNKS), m_count(XSUM_LCHUNKS, -1), m_chunksUsed(XSUM_LCHUNKS / 64, 0), m_usedUsed{0},
-      m_sacc{XSUM_SMALL_CARRY_TERMS, 0, 0} {}
-
-/*
-    ADD CHUNK FROM A LARGE ACCUMULATOR TO THE SMALL ACCUMULATOR WITHIN IT.
-    The large accumulator chunk to add is indexed by ix.  This chunk will
-    be cleared to zero and its count reset after it has been added to the
-    small accumulator (except no add is done for a new chunk being initialized).
-    This procedure should not be called for the special chunks correspnding to
-    Inf or NaN, whose counts should always remain at -1.
-*/
-void XsumLargeAccumulator::addLchunkToSmall(int_fast16_t ix) {
-    const int_fast16_t count = m_count[ix];
-
-    // Add to the small accumulator only if the count is not -1, which
-    // indicates a chunk that contains nothing yet.
-    if (count >= 0) {
-        // Propagate carries in the small accumulator if necessary.
-        if (m_sacc.m_addsUntilPropagate == 0) {
-            m_sacc.xsumCarryPropagate();
-        }
-
-        // Get the chunk we will add.  Note that this chunk is the integer sum
-        // of entire 64-bit floating-point representations, with sign, exponent,
-        // and mantissa, but we want only the sum of the mantissas.
-        uint64_t chunk = m_chunk[ix];
-
-        // If we added the maximum number of values to 'chunk', the sum of
-        // the sign and exponent parts (all the same, equal to the index) will
-        // have overflowed out the top, leaving only the sum of the mantissas.
-        // If the count of how many more terms we could have summed is greater
-        // than zero, we therefore add this count times the index (shifted to
-        // the position of the sign and exponent) to get the unwanted bits to
-        // overflow out the top.
-        if (count > 0) {
-            chunk += static_cast<uint64_t>(count * ix) << XSUM_MANTISSA_BITS;
-        }
-
-        // Find the exponent for this chunk from the low bits of the index,
-        // and split it into low and high parts, for accessing the small
-        // accumulator.  Noting that for denormalized numbers where the
-        // exponent part is zero, the actual exponent is 1 (before subtracting
-        // the bias), not zero.
-        int_fast16_t exp = ix & XSUM_EXP_MASK;
-        int_fast16_t lowExp = exp & XSUM_LOW_EXP_MASK;
-        int_fast16_t highExp = exp >> XSUM_LOW_EXP_BITS;
-        if (exp == 0) {
-            lowExp = 1;
-            highExp = 0;
-        }
-
-        // Split the mantissa into three parts, for three consecutive chunks in
-        // the small accumulator.  Except for denormalized numbers, add in the sum
-        // of all the implicit 1 bits that are above the actual mantissa bits.
-        uint64_t lowChunk = (chunk << lowExp) & XSUM_LOW_MANTISSA_MASK;
-        uint64_t midChunk = chunk >> (XSUM_LOW_MANTISSA_BITS - lowExp);
-        if (exp != 0) { // normalized
-            midChunk += static_cast<uint64_t>((1 << XSUM_LCOUNT_BITS) - count)
-                        << (XSUM_MANTISSA_BITS - XSUM_LOW_MANTISSA_BITS + lowExp);
-        }
-        uint64_t highChunk = midChunk >> XSUM_LOW_MANTISSA_BITS;
-        midChunk &= XSUM_LOW_MANTISSA_MASK;
-
-        // Add or subtract the three parts of the mantissa from three small
-        // accumulator chunks, according to the sign that is part of the index.
-        if (ix & (1 << XSUM_EXP_BITS)) {
-            m_sacc.m_chunk[highExp] -= lowChunk;
-            m_sacc.m_chunk[highExp + 1] -= midChunk;
-            m_sacc.m_chunk[highExp + 2] -= highChunk;
-        } else {
-            m_sacc.m_chunk[highExp] += lowChunk;
-            m_sacc.m_chunk[highExp + 1] += midChunk;
-            m_sacc.m_chunk[highExp + 2] += highChunk;
-        }
-
-        // The above additions/subtractions reduce by one the number we can
-        // do before we need to do carry propagation again.
-        m_sacc.m_addsUntilPropagate -= 1;
-    }
-
-    // We now clear the chunk to zero, and set the count to the number
-    // of adds we can do before the mantissa would overflow.  We also
-    // set the bit in chunks_used to indicate that this chunk is in use
-    // (if that is enabled).
-    m_chunk[ix] = 0;
-    m_count[ix] = 1 << XSUM_LCOUNT_BITS;
-    m_chunksUsed[ix >> 6] |= static_cast<uint64_t>(1) << (ix & 0x3f);
-    m_usedUsed |= static_cast<uint64_t>(1) << (ix >> 6);
-}
-
-/*
-    ADD A CHUNK TO THE LARGE ACCUMULATOR OR PROCESS NAN OR INF.  This routine
-    is called when the count for a chunk is negative after decrementing, which
-    indicates either inf/nan, or that the chunk has not been initialized, or
-    that the chunk needs to be transferred to the small accumulator.
-*/
-void XsumLargeAccumulator::largeAddValueInfNan(int_fast16_t ix, uint64_t uintv) {
-    if ((ix & XSUM_EXP_MASK) == XSUM_EXP_MASK) {
-        m_sacc.xsumSmallAddInfNan(uintv);
-    } else {
-        this->addLchunkToSmall(ix);
-        m_count[ix] -= 1;
-        m_chunk[ix] += uintv;
-    }
-}
-
 // XsumLarge
 
 XsumLarge::XsumLarge() : m_lacc{} {}
@@ -673,99 +764,28 @@ void XsumLarge::add1(double value) {
     small accumulator, and then calling its rounding procedure.
 */
 double XsumLarge::computeRound() {
-    transferToSmall();
+    m_lacc.transferToSmall();
     XsumSmall xsumSmall{m_lacc.m_sacc};
     return xsumSmall.computeRound();
 }
 
-/*
-    TRANSFER ALL CHUNKS IN LARGE ACCUMULATOR TO ITS SMALL ACCUMULATOR.
-*/
-void XsumLarge::transferToSmall() {
-    size_t p = 0;
-    size_t chunksUsedSize = m_lacc.m_chunksUsed.size();
+// XsumAuto
 
-    // Very quickly skip some unused low-order blocks of chunks by looking
-    // at the m_usedUsed flags.
-    uint64_t uu = m_lacc.m_usedUsed;
-    if ((uu & 0xffffffff) == 0) {
-        uu >>= 32;
-        p += 32;
-    }
-    if ((uu & 0xffff) == 0) {
-        uu >>= 16;
-        p += 16;
-    }
-    if ((uu & 0xff) == 0) {
-        p += 8;
-    }
+XsumAuto::XsumAuto() : m_acc{XsumSmall{}} {}
 
-    // Loop over remaining blocks of chunks.
-    uint64_t u = m_lacc.m_chunksUsed[p];
-    do {
-        // Loop to quickly find the next non-zero block of used flags,
-        // or finish up if we've added all the used blocks to the small accumulator.
-        for (;;) {
-            u = m_lacc.m_chunksUsed[p];
-            if (u != 0) {
-                break;
-            }
-            p += 1;
-            if (p == chunksUsedSize) {
-                return;
-            }
-            u = m_lacc.m_chunksUsed[p];
-            if (u != 0) {
-                break;
-            }
-            p += 1;
-            if (p == chunksUsedSize) {
-                return;
-            }
-            u = m_lacc.m_chunksUsed[p];
-            if (u != 0) {
-                break;
-            }
-            p += 1;
-            if (p == chunksUsedSize) {
-                return;
-            }
-            u = m_lacc.m_chunksUsed[p];
-            if (u != 0) {
-                break;
-            }
-            p += 1;
-            if (p == chunksUsedSize) {
-                return;
-            }
-        }
+XsumAuto::XsumAuto(size_t expectedInputSize)
+    : m_acc{(expectedInputSize < XSUM_THRESHOLD) ? XsumVariant{XsumSmall{}} : XsumVariant{XsumLarge{}}} {}
 
-        // Find and process the chunks in this block that are used.  We skip
-        // forward based on the m_chunksUsed flags until we're within eight
-        // bits of a chunk that is in use.
-        int ix = p << 6;
-        if ((u & 0xffffffff) == 0) {
-            u >>= 32;
-            ix += 32;
-        }
-        if ((u & 0xffff) == 0) {
-            u >>= 16;
-            ix += 16;
-        }
-        if ((u & 0xff) == 0) {
-            u >>= 8;
-            ix += 8;
-        }
+void XsumAuto::addv(const std::span<const double> vec) {
+    std::visit([&](auto &x) { x.addv(vec); }, this->m_acc);
+}
 
-        do {
-            if (m_lacc.m_count[ix] >= 0) {
-                m_lacc.addLchunkToSmall(ix);
-            }
-            ix += 1;
-            u >>= 1;
-        } while (u != 0);
-        p += 1;
-    } while (p != chunksUsedSize);
+void XsumAuto::add1(double value) {
+    std::visit([&](auto &x) { x.add1(value); }, this->m_acc);
+}
+
+double XsumAuto::computeRound() {
+    return std::visit([&](auto &x) { return x.computeRound(); }, this->m_acc);
 }
 
 } // namespace XSUM
