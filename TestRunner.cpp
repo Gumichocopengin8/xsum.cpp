@@ -4,16 +4,30 @@ namespace Test {
 
 namespace {
 
-void sameValue(const std::vector<double> vec, double expected) {
+void isValid(double actual, double expected) {
+    if (!std::isnan(actual) && (actual != expected || std::signbit(actual) != std::signbit(expected))) {
+        throw std::format("Bad result: {}! Expected value: {}", actual, expected);
+    }
+    if (!std::isnan(actual) && std::isnan(expected)) {
+        throw std::format("Bad result: {}! Expected value: {}", actual, expected);
+    }
+}
+
+void sameValue(const std::vector<double> &vec, double expected) {
     XSUM::XsumSmall xsmall;
     xsmall.addv(vec);
-    const auto res = xsmall.computeRound();
-    if (!std::isnan(res) && (res != expected || std::signbit(res) != std::signbit(expected))) {
-        throw std::format("Bad result: {}! Expected value: {}", res, expected);
-    }
-    if (!std::isnan(res) && std::isnan(expected)) {
-        throw std::format("Bad result: {}! Expected value: {}", res, expected);
-    }
+    const auto xsmallRes = xsmall.computeRound();
+    isValid(xsmallRes, expected);
+
+    XSUM::XsumLarge xlarge;
+    xlarge.addv(vec);
+    const auto xlargeRes = xlarge.computeRound();
+    isValid(xlargeRes, expected);
+
+    XSUM::XsumAuto xauto;
+    xauto.addv(vec);
+    const auto xautoRes = xauto.computeRound();
+    isValid(xautoRes, expected);
 }
 
 } // namespace

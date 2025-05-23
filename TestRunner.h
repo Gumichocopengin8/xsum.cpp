@@ -1,15 +1,17 @@
 #pragma once
 
-#include "XsumSmall.h"
+#include "Xsum.h"
 #include <vector>
 
 namespace Test {
 
 namespace {
 
-void sameValue(std::vector<double> vec, double expected);
+void isValid(double actual, double expected);
 
-}
+void sameValue(std::vector<double> &vec, double expected);
+
+} // namespace
 
 void runTest();
 
