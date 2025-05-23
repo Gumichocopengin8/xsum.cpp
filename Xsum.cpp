@@ -446,7 +446,7 @@ void XsumLargeAccumulator::transferToSmall() {
             u >>= 1;
         } while (u != 0);
         p += 1;
-    } while (p != chunksUsedSize);
+    } while (p < chunksUsedSize);
 }
 
 } // namespace
@@ -456,7 +456,8 @@ void XsumLargeAccumulator::transferToSmall() {
 XsumSmall::XsumSmall() : m_sacc{} {}
 
 XsumSmall::XsumSmall(XsumSmallAccumulator sacc)
-    : m_sacc{std::move(sacc.m_chunk), sacc.m_addsUntilPropagate, sacc.m_Inf, sacc.m_NaN, sacc.m_sizeCount, sacc.m_hasPosNumber} {}
+    : m_sacc{std::move(sacc.m_chunk), sacc.m_addsUntilPropagate, sacc.m_Inf, sacc.m_NaN,
+             sacc.m_sizeCount,        sacc.m_hasPosNumber} {}
 
 /*
     ADD A VECTOR OF FLOATING-POINT NUMBERS TO A SMALL ACCUMULATOR.  Mixes
@@ -777,15 +778,28 @@ XsumAuto::XsumAuto(size_t expectedInputSize)
     : m_acc{(expectedInputSize < XSUM_THRESHOLD) ? XsumVariant{XsumSmall{}} : XsumVariant{XsumLarge{}}} {}
 
 void XsumAuto::addv(const std::span<const double> vec) {
-    std::visit([&](auto &x) { x.addv(vec); }, this->m_acc);
+    // std::get_if is faster than std::visit
+    if (auto *xsumSmall = std::get_if<XsumSmall>(&this->m_acc))
+        xsumSmall->addv(vec);
+    else if (auto *xsumLarge = std::get_if<XsumLarge>(&this->m_acc))
+        xsumLarge->addv(vec);
 }
 
 void XsumAuto::add1(double value) {
-    std::visit([&](auto &x) { x.add1(value); }, this->m_acc);
+    // std::get_if is faster than std::visit
+    if (auto *xsumSmall = std::get_if<XsumSmall>(&this->m_acc))
+        xsumSmall->add1(value);
+    else if (auto *xsumLarge = std::get_if<XsumLarge>(&this->m_acc))
+        xsumLarge->add1(value);
 }
 
 double XsumAuto::computeRound() {
-    return std::visit([&](auto &x) { return x.computeRound(); }, this->m_acc);
+    // std::get_if is faster than std::visit
+    if (auto *xsumSmall = std::get_if<XsumSmall>(&this->m_acc))
+        return xsumSmall->computeRound();
+    else if (auto *xsumLarge = std::get_if<XsumLarge>(&this->m_acc))
+        return xsumLarge->computeRound();
+    return -0.0;
 }
 
 } // namespace XSUM
