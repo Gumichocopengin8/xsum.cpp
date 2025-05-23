@@ -1,4 +1,4 @@
-#include "XsumSmall.h"
+#include "Xsum.h"
 
 namespace XSUM {
 

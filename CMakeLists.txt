@@ -5,8 +5,8 @@ set(CMAKE_CXX_STANDARD 23)
 add_executable(
   xsum
   main.cpp
-  XsumSmall.cpp
-  XsumSmall.h
+  Xsum.cpp
+  Xsum.h
   TestRunner.cpp
   TestRunner.h
 )

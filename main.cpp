@@ -1,5 +1,5 @@
 #include "TestRunner.h"
-#include "XsumSmall.h"
+#include "Xsum.h"
 #include <iostream>
 #include <span>
 #include <vector>

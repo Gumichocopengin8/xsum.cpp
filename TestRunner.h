@@ -1,6 +1,6 @@
 #pragma once
 
-#include "XsumSmall.h"
+#include "Xsum.h"
 #include <vector>
 
 namespace Test {
