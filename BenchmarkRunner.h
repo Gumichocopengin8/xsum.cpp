@@ -23,7 +23,7 @@ constexpr auto arr1000 = generateArray<1'000>(ELEMENT);
 constexpr auto arr10000 = generateArray<10'000>(ELEMENT);
 constexpr auto arr100000 = generateArray<100'000>(ELEMENT);
 
-std::string getXsumKindName(XSUM::XsumKind kind) {
+constexpr std::string getXsumKindName(XSUM::XsumKind kind) {
     return kind == XSUM::XsumKind::XsumSmall ? "XsumSmall" : "XsumLarge";
 }
 

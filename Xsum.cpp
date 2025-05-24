@@ -781,28 +781,43 @@ XsumAuto::XsumAuto(XsumKind kind)
     : m_acc{(kind == XsumKind::XsumSmall) ? XsumVariant{XsumSmall{}} : XsumVariant{XsumLarge{}}} {}
 
 void XsumAuto::addv(const std::span<const double> vec) {
-    // std::get_if is faster than std::visit
-    if (auto *xsumSmall = std::get_if<XsumSmall>(&this->m_acc))
-        xsumSmall->addv(vec);
-    else if (auto *xsumLarge = std::get_if<XsumLarge>(&this->m_acc))
-        xsumLarge->addv(vec);
+    // std::get_if is faster than std::visit and std::get_if
+    switch (this->m_acc.index()) {
+        case 0:
+            std::get<0>(this->m_acc).addv(vec);
+            break;
+        case 1:
+            std::get<1>(this->m_acc).addv(vec);
+            break;
+        default:
+            break;
+    }
 }
 
 void XsumAuto::add1(double value) {
-    // std::get_if is faster than std::visit
-    if (auto *xsumSmall = std::get_if<XsumSmall>(&this->m_acc))
-        xsumSmall->add1(value);
-    else if (auto *xsumLarge = std::get_if<XsumLarge>(&this->m_acc))
-        xsumLarge->add1(value);
+    // std::get_if is faster than std::visit and std::get_if
+    switch (this->m_acc.index()) {
+        case 0:
+            std::get<0>(this->m_acc).add1(value);
+            break;
+        case 1:
+            std::get<1>(this->m_acc).add1(value);
+            break;
+        default:
+            break;
+    }
 }
 
 double XsumAuto::computeRound() {
-    // std::get_if is faster than std::visit
-    if (auto *xsumSmall = std::get_if<XsumSmall>(&this->m_acc))
-        return xsumSmall->computeRound();
-    else if (auto *xsumLarge = std::get_if<XsumLarge>(&this->m_acc))
-        return xsumLarge->computeRound();
-    return -0.0;
+    // std::get is faster than std::visit and std::get_if
+    switch (this->m_acc.index()) {
+        case 0:
+            return std::get<0>(this->m_acc).computeRound();
+        case 1:
+            return std::get<1>(this->m_acc).computeRound();
+        default:
+            return -0;
+    }
 }
 
 } // namespace XSUM
