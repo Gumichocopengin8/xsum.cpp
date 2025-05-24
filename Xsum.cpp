@@ -777,6 +777,9 @@ XsumAuto::XsumAuto() : m_acc{XsumSmall{}} {}
 XsumAuto::XsumAuto(size_t expectedInputSize)
     : m_acc{(expectedInputSize < XSUM_THRESHOLD) ? XsumVariant{XsumSmall{}} : XsumVariant{XsumLarge{}}} {}
 
+XsumAuto::XsumAuto(XsumKind kind)
+    : m_acc{(kind == XsumKind::XsumSmall) ? XsumVariant{XsumSmall{}} : XsumVariant{XsumLarge{}}} {}
+
 void XsumAuto::addv(const std::span<const double> vec) {
     // std::get_if is faster than std::visit
     if (auto *xsumSmall = std::get_if<XsumSmall>(&this->m_acc))

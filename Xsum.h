@@ -72,10 +72,13 @@ class XsumLarge final {
     XsumLargeAccumulator m_lacc;
 };
 
+enum class XsumKind : short { XsumSmall, XsumLarge };
+
 class XsumAuto final {
   public:
     explicit XsumAuto();
     explicit XsumAuto(size_t expectedInputSize);
+    explicit XsumAuto(XsumKind kind);
     ~XsumAuto() = default;
 
     void addv(const std::span<const double> vec);

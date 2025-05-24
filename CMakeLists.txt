@@ -9,4 +9,5 @@ add_executable(
   Xsum.h
   TestRunner.cpp
   TestRunner.h
+  BenchmarkRunner.h
 )

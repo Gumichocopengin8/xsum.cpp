@@ -1,3 +1,4 @@
+#include "BenchmarkRunner.h"
 #include "TestRunner.h"
 #include "Xsum.h"
 #include <iostream>
@@ -16,5 +17,9 @@ int main() {
     xauto.addv(vec);
     std::cout << "XsumAuto: " << xauto.computeRound() << std::endl;
     Test::runTest();
+    Benchmark::runBenchmarkWithAddV(XSUM::XsumKind::XsumSmall);
+    Benchmark::runBenchmarkWithAddV(XSUM::XsumKind::XsumLarge);
+    Benchmark::runBenchmarkWithAdd1(XSUM::XsumKind::XsumSmall);
+    Benchmark::runBenchmarkWithAdd1(XSUM::XsumKind::XsumLarge);
     return 0;
 }
