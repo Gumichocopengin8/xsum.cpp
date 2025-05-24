@@ -6,6 +6,7 @@
 #include <vector>
 
 int main() {
+    // Example
     std::vector<double> vec{1e20, 0.1, -1e20, 1e20, 0.1, -1e20, 1e20, 0.1, -1e20};
     XSUM::XsumSmall xsmall;
     xsmall.addv(vec);
@@ -16,10 +17,27 @@ int main() {
     XSUM::XsumAuto xauto;
     xauto.addv(vec);
     std::cout << "XsumAuto: " << xauto.computeRound() << std::endl;
+
+    // Test
     Test::runTest();
-    Benchmark::runBenchmarkWithAddV(XSUM::XsumKind::XsumSmall);
-    Benchmark::runBenchmarkWithAddV(XSUM::XsumKind::XsumLarge);
-    Benchmark::runBenchmarkWithAdd1(XSUM::XsumKind::XsumSmall);
-    Benchmark::runBenchmarkWithAdd1(XSUM::XsumKind::XsumLarge);
+
+    // Benchmark
+    // XsumSmall
+    std::cout << "-------XsumSmall-------" << std::endl;
+    Benchmark::runXsumSmallBenchmarkWithAddV();
+    Benchmark::runXsumSmallBenchmarkWithAdd1();
+
+    // XsumLarge
+    std::cout << "-------XsumLarge-------" << std::endl;
+    Benchmark::runXsumLargeBenchmarkWithAddV();
+    Benchmark::runXsumLargeBenchmarkWithAdd1();
+
+    // XsumAuto
+    std::cout << "-------XsumAuto(XsumSmall)-------" << std::endl;
+    Benchmark::runXsumAutoBenchmarkWithAddV(XSUM::XsumKind::XsumSmall);
+    Benchmark::runXsumAutoBenchmarkWithAdd1(XSUM::XsumKind::XsumSmall);
+    std::cout << "-------XsumAuto(XsumLarge)-------" << std::endl;
+    Benchmark::runXsumAutoBenchmarkWithAddV(XSUM::XsumKind::XsumLarge);
+    Benchmark::runXsumAutoBenchmarkWithAdd1(XSUM::XsumKind::XsumLarge);
     return 0;
 }
