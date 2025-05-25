@@ -782,41 +782,34 @@ XsumAuto::XsumAuto(XsumKind kind)
 
 void XsumAuto::addv(const std::span<const double> vec) {
     // std::get_if is faster than std::visit and std::get_if
-    switch (this->m_acc.index()) {
-        case 0:
-            std::get<0>(this->m_acc).addv(vec);
-            break;
-        case 1:
-            std::get<1>(this->m_acc).addv(vec);
-            break;
-        default:
-            break;
+    if (std::holds_alternative<XSUM::XsumSmall>(this->m_acc)) {
+        // XsumSmall
+        std::get<XSUM::XsumSmall>(this->m_acc).addv(vec);
+    } else {
+        // XsumLarge
+        std::get<XSUM::XsumLarge>(this->m_acc).addv(vec);
     }
 }
 
 void XsumAuto::add1(double value) {
     // std::get_if is faster than std::visit and std::get_if
-    switch (this->m_acc.index()) {
-        case 0:
-            std::get<0>(this->m_acc).add1(value);
-            break;
-        case 1:
-            std::get<1>(this->m_acc).add1(value);
-            break;
-        default:
-            break;
+    if (std::holds_alternative<XSUM::XsumSmall>(this->m_acc)) {
+        // XsumSmall
+        std::get<XSUM::XsumSmall>(this->m_acc).add1(value);
+    } else {
+        // XsumLarge
+        std::get<XSUM::XsumLarge>(this->m_acc).add1(value);
     }
 }
 
 double XsumAuto::computeRound() {
     // std::get is faster than std::visit and std::get_if
-    switch (this->m_acc.index()) {
-        case 0:
-            return std::get<0>(this->m_acc).computeRound();
-        case 1:
-            return std::get<1>(this->m_acc).computeRound();
-        default:
-            return -0;
+    if (std::holds_alternative<XSUM::XsumSmall>(this->m_acc)) {
+        // XsumSmall
+        return std::get<XSUM::XsumSmall>(this->m_acc).computeRound();
+    } else {
+        // XsumLarge
+        return std::get<XSUM::XsumLarge>(this->m_acc).computeRound();
     }
 }
 
