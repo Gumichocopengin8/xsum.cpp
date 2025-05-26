@@ -7,6 +7,8 @@ add_executable(
   main.cpp
   Xsum.cpp
   Xsum.h
+  XsumOriginal.c
+  XsumOriginal.h
   TestRunner.cpp
   TestRunner.h
   BenchmarkRunner.h
