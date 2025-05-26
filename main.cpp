@@ -39,5 +39,13 @@ int main() {
     std::cout << "-------XsumAuto(XsumLarge)-------" << std::endl;
     Benchmark::runXsumAutoBenchmarkWithAddV(XSUM::XsumKind::XsumLarge);
     Benchmark::runXsumAutoBenchmarkWithAdd1(XSUM::XsumKind::XsumLarge);
+
+    // XsumOriginal
+    std::cout << "-------XsumOriginal(Small)-------" << std::endl;
+    Benchmark::runXsumOriginalSmallBenchmarkWithAddv();
+    Benchmark::runXsumOriginalSmallBenchmarkWithAdd1();
+    std::cout << "-------XsumOriginal(Large)-------" << std::endl;
+    Benchmark::runXsumOriginalLargeBenchmarkWithAddv();
+    Benchmark::runXsumOriginalLargeBenchmarkWithAdd1();
     return 0;
 }
