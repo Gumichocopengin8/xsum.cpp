@@ -168,7 +168,7 @@ void runXsumAutoBenchmarkWithAdd1(XSUM::XsumKind kind, size_t eachTestCaseIter =
 }
 
 void runXsumOriginalSmallBenchmarkWithAddv(size_t eachTestCaseIter = DEFAULT_EACT_TEST_CASE_ITERATION) {
-    std::cout << std::format("### Xsum Original Small add1() benchmark with {} iteration for each test case",
+    std::cout << std::format("### Xsum Original Small addv() benchmark with {} iteration for each test case",
                              eachTestCaseIter)
               << std::endl;
     for (auto &arr : arrList) {
@@ -216,7 +216,7 @@ void runXsumOriginalSmallBenchmarkWithAdd1(size_t eachTestCaseIter = DEFAULT_EAC
 }
 
 void runXsumOriginalLargeBenchmarkWithAddv(size_t eachTestCaseIter = DEFAULT_EACT_TEST_CASE_ITERATION) {
-    std::cout << std::format("### Xsum Original Large add1() benchmark with {} iteration for each test case",
+    std::cout << std::format("### Xsum Original Large addv() benchmark with {} iteration for each test case",
                              eachTestCaseIter)
               << std::endl;
     for (auto &arr : arrList) {
