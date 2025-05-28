@@ -11,6 +11,8 @@ from Radford M. Neal's xsum repository.
 ## How to Run
 
 - Make sure that `cmake` is installed
+- To initialize build directory, run `cmake -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE --no-warn-unused-cli -S./ -B./build`
+  - No need to run after the first time
 - In the root dir, run `cmake --build ./build --config Release --target all -j 12 --`
 - Then run `./build/xsum`
 
