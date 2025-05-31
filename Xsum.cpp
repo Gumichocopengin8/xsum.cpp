@@ -724,30 +724,7 @@ XsumLarge::XsumLarge() : m_lacc{} {}
 */
 void XsumLarge::addv(const std::span<const double> vec) {
     for (const auto value : vec) {
-        // increment
-        m_lacc.m_sacc.incrementWhenValueAdded(value);
-
-        // Convert to integer form in uintv
-        uint64_t uintv = std::bit_cast<uint64_t>(value);
-
-        // Isolate the upper sign+exponent bits that index the chunk.
-        int_fast16_t ix = uintv >> XSUM_MANTISSA_BITS;
-
-        // Find the count for this chunk, and subtract one.
-        int_least16_t count = m_lacc.m_count[ix] - 1;
-
-        if (count < 0) {
-            // If the decremented count is negative, it's either a special
-            // Inf/NaN chunk (in which case count will stay at -1), or one that
-            // needs to be transferred to the small accumulator, or one that
-            // has never been used before and needs to be initialized.
-            m_lacc.largeAddValueInfNan(ix, uintv);
-        } else {
-            // Store the decremented count of additions allowed before transfer,
-            // and add this value to the chunk.
-            m_lacc.m_count[ix] = count;
-            m_lacc.m_chunk[ix] += uintv;
-        }
+        this->add1(value);
     }
 }
 
@@ -755,7 +732,30 @@ void XsumLarge::addv(const std::span<const double> vec) {
     ADD ONE DOUBLE TO A LARGE ACCUMULATOR.  Just calls xsum_large_addv.
 */
 void XsumLarge::add1(double value) {
-    addv(std::array<double, 1>{value});
+    // increment
+    m_lacc.m_sacc.incrementWhenValueAdded(value);
+
+    // Convert to integer form in uintv
+    uint64_t uintv = std::bit_cast<uint64_t>(value);
+
+    // Isolate the upper sign+exponent bits that index the chunk.
+    int_fast16_t ix = uintv >> XSUM_MANTISSA_BITS;
+
+    // Find the count for this chunk, and subtract one.
+    int_least16_t count = m_lacc.m_count[ix] - 1;
+
+    if (count < 0) {
+        // If the decremented count is negative, it's either a special
+        // Inf/NaN chunk (in which case count will stay at -1), or one that
+        // needs to be transferred to the small accumulator, or one that
+        // has never been used before and needs to be initialized.
+        m_lacc.largeAddValueInfNan(ix, uintv);
+    } else {
+        // Store the decremented count of additions allowed before transfer,
+        // and add this value to the chunk.
+        m_lacc.m_count[ix] = count;
+        m_lacc.m_chunk[ix] += uintv;
+    }
 }
 
 /*
