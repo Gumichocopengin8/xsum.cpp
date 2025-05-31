@@ -296,7 +296,7 @@ void XsumLargeAccumulator::addLchunkToSmall(int_fast16_t ix) {
         // accumulator.  Noting that for denormalized numbers where the
         // exponent part is zero, the actual exponent is 1 (before subtracting
         // the bias), not zero.
-        int_fast16_t exp = ix & XSUM_EXP_MASK;
+        const int_fast16_t exp = ix & XSUM_EXP_MASK;
         int_fast16_t lowExp = exp & XSUM_LOW_EXP_MASK;
         int_fast16_t highExp = exp >> XSUM_LOW_EXP_BITS;
         if (exp == 0) {
@@ -307,13 +307,13 @@ void XsumLargeAccumulator::addLchunkToSmall(int_fast16_t ix) {
         // Split the mantissa into three parts, for three consecutive chunks in
         // the small accumulator.  Except for denormalized numbers, add in the sum
         // of all the implicit 1 bits that are above the actual mantissa bits.
-        uint64_t lowChunk = (chunk << lowExp) & XSUM_LOW_MANTISSA_MASK;
+        const uint64_t lowChunk = (chunk << lowExp) & XSUM_LOW_MANTISSA_MASK;
         uint64_t midChunk = chunk >> (XSUM_LOW_MANTISSA_BITS - lowExp);
         if (exp != 0) { // normalized
             midChunk += static_cast<uint64_t>((1 << XSUM_LCOUNT_BITS) - count)
                         << (XSUM_MANTISSA_BITS - XSUM_LOW_MANTISSA_BITS + lowExp);
         }
-        uint64_t highChunk = midChunk >> XSUM_LOW_MANTISSA_BITS;
+        const uint64_t highChunk = midChunk >> XSUM_LOW_MANTISSA_BITS;
         midChunk &= XSUM_LOW_MANTISSA_MASK;
 
         // Add or subtract the three parts of the mantissa from three small
@@ -363,8 +363,8 @@ void XsumLargeAccumulator::largeAddValueInfNan(int_fast16_t ix, uint64_t uintv) 
     TRANSFER ALL CHUNKS IN LARGE ACCUMULATOR TO ITS SMALL ACCUMULATOR.
 */
 void XsumLargeAccumulator::transferToSmall() {
+    const size_t chunksUsedSize = m_chunksUsed.size();
     size_t p = 0;
-    size_t chunksUsedSize = m_chunksUsed.size();
 
     // Very quickly skip some unused low-order blocks of chunks by looking
     // at the m_usedUsed flags.
@@ -736,13 +736,13 @@ void XsumLarge::add1(double value) {
     m_lacc.m_sacc.incrementWhenValueAdded(value);
 
     // Convert to integer form in uintv
-    uint64_t uintv = std::bit_cast<uint64_t>(value);
+    const uint64_t uintv = std::bit_cast<uint64_t>(value);
 
     // Isolate the upper sign+exponent bits that index the chunk.
-    int_fast16_t ix = uintv >> XSUM_MANTISSA_BITS;
+    const int_fast16_t ix = uintv >> XSUM_MANTISSA_BITS;
 
     // Find the count for this chunk, and subtract one.
-    int_least16_t count = m_lacc.m_count[ix] - 1;
+    const int_least16_t count = m_lacc.m_count[ix] - 1;
 
     if (count < 0) {
         // If the decremented count is negative, it's either a special
