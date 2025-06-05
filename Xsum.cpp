@@ -104,9 +104,7 @@ int XsumSmallAccumulator::carryPropagate() {
     int uix = -1; // indicates that a non-zero chunk has not been found yet
 
     do {
-        int64_t c;     // Set to the chunk at index i (next non-zero one)
-        int64_t clow;  // Low-order bits of c
-        int64_t chigh; // High-order bits of c
+        int64_t c; // Set to the chunk at index i (next non-zero one)
 
         // Find the next non-zero chunk, setting i to its index, or break out
         // of loop if there is none.  Note that the chunk at index u is not
@@ -124,7 +122,7 @@ int XsumSmallAccumulator::carryPropagate() {
             break;
         }
 
-        chigh = c >> XSUM_LOW_MANTISSA_BITS;
+        const int64_t chigh = c >> XSUM_LOW_MANTISSA_BITS; // High-order bits of c
         if (chigh == 0) {
             uix = i;
             i += 1;
@@ -139,7 +137,7 @@ int XsumSmallAccumulator::carryPropagate() {
             u = i + 1; // we will change chunk[u+1], so we'll need to look at it
         }
 
-        clow = c & XSUM_LOW_MANTISSA_MASK;
+        const int64_t clow = c & XSUM_LOW_MANTISSA_MASK; // Low-order bits of c
         if (clow != 0) {
             uix = i;
         }
@@ -178,7 +176,7 @@ int XsumSmallAccumulator::carryPropagate() {
     while (m_chunk[uix] == -1 && uix > 0) {
         // Left shift of a negative number is undefined according to the standard,
         // so do a multiply - it's all presumably constant-folded by the compiler.
-        m_chunk[uix - 1] += static_cast<int64_t>(-1) * (static_cast<int64_t>(1) << XSUM_LOW_MANTISSA_BITS);
+        m_chunk[uix - 1] += -(static_cast<int64_t>(1) << XSUM_LOW_MANTISSA_BITS);
         m_chunk[uix] = 0;
         uix -= 1;
     }
@@ -197,7 +195,7 @@ inline void XsumSmallAccumulator::add1NoCarry(const double value) {
     const int64_t ivalue = std::bit_cast<int64_t>(value);
 
     // Extract exponent and mantissa.  Split exponent into high and low parts.
-    int_fast16_t exp = (ivalue >> XSUM_MANTISSA_BITS) & XSUM_EXP_MASK;
+    const int_fast16_t exp = (ivalue >> XSUM_MANTISSA_BITS) & XSUM_EXP_MASK;
     int64_t mantissa = ivalue & XSUM_MANTISSA_MASK;
     const int_fast16_t highExp = exp >> XSUM_LOW_EXP_BITS;
     int_fast16_t lowExp = exp & XSUM_LOW_EXP_MASK;
@@ -210,7 +208,7 @@ inline void XsumSmallAccumulator::add1NoCarry(const double value) {
             return;
         }
         // Denormalized mantissa has no implicit 1, but exponent is 1 not 0.
-        exp = lowExp = 1;
+        lowExp = 1;
     } else if (exp == XSUM_EXP_MASK) { // Inf or NaN
         // Just update flags in accumulator structure.
         this->addInfNan(ivalue);
@@ -484,9 +482,7 @@ void XsumSmall::addv(const std::span<const double> vec) {
 }
 
 /*
-    ADD ONE DOUBLE TO A SMALL ACCUMULATOR.  This is equivalent to, but
-    somewhat faster than, calling xsum_small_addv with a vector of one
-    value.
+    ADD ONE DOUBLE TO A SMALL ACCUMULATOR.
 */
 void XsumSmall::add1(const double value) {
     m_sacc.incrementWhenValueAdded(value);
@@ -654,7 +650,7 @@ double XsumSmall::computeRound() {
         // form 10000... but the negation of the full 'ivalue' is not 10000...
 
         if (((-ivalue) & (static_cast<int64_t>(1) << (XSUM_MANTISSA_BITS + 2))) == 0) {
-            int pos = (int64_t)1 << (XSUM_LOW_MANTISSA_BITS - 1 - more);
+            const int pos = static_cast<int64_t>(1) << (XSUM_LOW_MANTISSA_BITS - 1 - more);
             ivalue *= 2; // note that left shift undefined if ivalue is negative
             if (lower & pos) {
                 ivalue += 1;
@@ -703,7 +699,7 @@ double XsumSmall::computeRound() {
 
     // If exponent has overflowed, change to plus or minus Inf and return.
     if (e >= XSUM_EXP_MASK) {
-        intv |= static_cast<int64_t>(XSUM_EXP_MASK) << XSUM_MANTISSA_BITS;
+        intv |= XSUM_EXP_MASK << XSUM_MANTISSA_BITS;
         return std::bit_cast<double>(intv);
     }
 
@@ -715,9 +711,24 @@ double XsumSmall::computeRound() {
     return std::bit_cast<double>(intv);
 }
 
+size_t XsumSmall::getSizeCount() {
+    return m_sacc.m_sizeCount;
+}
+
+XsumSmallAccumulator XsumSmall::transferAccumulator() {
+    return std::move(m_sacc);
+}
+
 // XsumLarge
 
 XsumLarge::XsumLarge() : m_lacc{} {}
+
+/*
+    TRANSFER NUMBER FROM A SMALL ACCUMULATOR TO A LARGE ACCUMULATOR.
+*/
+XsumLarge::XsumLarge(XsumSmall &&xsumsmall) : m_lacc{} {
+    m_lacc.m_sacc = xsumsmall.transferAccumulator();
+}
 
 /*
     ADD A VECTOR OF FLOATING-POINT NUMBERS TO A LARGE ACCUMULATOR.
@@ -772,44 +783,60 @@ double XsumLarge::computeRound() {
 
 // XsumAuto
 
-XsumAuto::XsumAuto() : m_acc{XsumSmall{}} {}
+XsumAuto::XsumAuto() : m_xsumType{XSUM::XsumAuto::XsumType::XsumSmall} {
+    new (&m_xsum.m_xsmall) XsumSmall();
+}
 
-XsumAuto::XsumAuto(size_t expectedInputSize)
-    : m_acc{(expectedInputSize < XSUM_THRESHOLD) ? XsumVariant{XsumSmall{}} : XsumVariant{XsumLarge{}}} {}
-
-XsumAuto::XsumAuto(XsumKind kind)
-    : m_acc{(kind == XsumKind::XsumSmall) ? XsumVariant{XsumSmall{}} : XsumVariant{XsumLarge{}}} {}
+XsumAuto::~XsumAuto() {
+    switch (m_xsumType) {
+        case XSUM::XsumAuto::XsumType::XsumSmall:
+            m_xsum.m_xsmall.~XsumSmall();
+            break;
+        case XSUM::XsumAuto::XsumType::XsumLarge:
+            m_xsum.m_xlarge.~XsumLarge();
+            break;
+    }
+}
 
 void XsumAuto::addv(const std::span<const double> vec) {
-    // std::get_if is faster than std::visit and std::get_if
-    if (std::holds_alternative<XSUM::XsumSmall>(this->m_acc)) {
-        // XsumSmall
-        std::get<XSUM::XsumSmall>(this->m_acc).addv(vec);
-    } else {
-        // XsumLarge
-        std::get<XSUM::XsumLarge>(this->m_acc).addv(vec);
+    switch (m_xsumType) {
+        case XSUM::XsumAuto::XsumType::XsumSmall:
+            m_xsum.m_xsmall.addv(vec);
+            transformToLarge();
+            break;
+        case XSUM::XsumAuto::XsumType::XsumLarge:
+            m_xsum.m_xlarge.addv(vec);
+            break;
     }
 }
 
 void XsumAuto::add1(double value) {
-    // std::get_if is faster than std::visit and std::get_if
-    if (std::holds_alternative<XSUM::XsumSmall>(this->m_acc)) {
-        // XsumSmall
-        std::get<XSUM::XsumSmall>(this->m_acc).add1(value);
-    } else {
-        // XsumLarge
-        std::get<XSUM::XsumLarge>(this->m_acc).add1(value);
+    switch (m_xsumType) {
+        case XSUM::XsumAuto::XsumType::XsumSmall:
+            m_xsum.m_xsmall.add1(value);
+            transformToLarge();
+            break;
+        case XSUM::XsumAuto::XsumType::XsumLarge:
+            m_xsum.m_xlarge.add1(value);
+            break;
     }
 }
 
 double XsumAuto::computeRound() {
-    // std::get is faster than std::visit and std::get_if
-    if (std::holds_alternative<XSUM::XsumSmall>(this->m_acc)) {
-        // XsumSmall
-        return std::get<XSUM::XsumSmall>(this->m_acc).computeRound();
-    } else {
-        // XsumLarge
-        return std::get<XSUM::XsumLarge>(this->m_acc).computeRound();
+    switch (m_xsumType) {
+        case XSUM::XsumAuto::XsumType::XsumSmall:
+            return m_xsum.m_xsmall.computeRound();
+        case XSUM::XsumAuto::XsumType::XsumLarge:
+            return m_xsum.m_xlarge.computeRound();
+    }
+}
+
+inline void XsumAuto::transformToLarge() {
+    if (m_xsumType == XSUM::XsumAuto::XsumType::XsumSmall && m_xsum.m_xsmall.getSizeCount() > XSUM_THRESHOLD) {
+        m_xsumType = XSUM::XsumAuto::XsumType::XsumLarge;
+        XsumSmall xsmall = std::move(m_xsum.m_xsmall);
+        m_xsum.m_xsmall.~XsumSmall();
+        new (&m_xsum.m_xlarge) XsumLarge{std::move(xsmall)};
     }
 }
 

@@ -25,10 +25,6 @@ constexpr auto arr10000 = generateArray<10'000>(ELEMENT);
 constexpr auto arr100000 = generateArray<100'000>(ELEMENT);
 constexpr std::array<const std::span<const double>, 5> arrList{arr10, arr100, arr1000, arr10000, arr100000};
 
-constexpr std::string getXsumKindName(XSUM::XsumKind kind) {
-    return kind == XSUM::XsumKind::XsumSmall ? "XsumSmall" : "XsumLarge";
-}
-
 constexpr size_t DEFAULT_EACT_TEST_CASE_ITERATION = 10'000;
 
 } // namespace
@@ -121,14 +117,13 @@ void runXsumLargeBenchmarkWithAdd1(size_t eachTestCaseIter = DEFAULT_EACT_TEST_C
     std::cout << std::endl;
 }
 
-void runXsumAutoBenchmarkWithAddV(XSUM::XsumKind kind, size_t eachTestCaseIter = DEFAULT_EACT_TEST_CASE_ITERATION) {
-    std::cout << std::format("### XsumAuto({}) addv() benchmark with {} iteration for each test case",
-                             getXsumKindName(kind), eachTestCaseIter)
+void runXsumAutoBenchmarkWithAddV(size_t eachTestCaseIter = DEFAULT_EACT_TEST_CASE_ITERATION) {
+    std::cout << std::format("### XsumAuto addv() benchmark with {} iteration for each test case", eachTestCaseIter)
               << std::endl;
     for (auto &arr : arrList) {
         auto start = std::chrono::high_resolution_clock::now();
         for (size_t i = 0; i < eachTestCaseIter; ++i) {
-            XSUM::XsumAuto xauto{kind};
+            XSUM::XsumAuto xauto;
             xauto.addv(arr);
             double res = xauto.computeRound();
             if (res != ELEMENT * arr.size()) {
@@ -143,14 +138,13 @@ void runXsumAutoBenchmarkWithAddV(XSUM::XsumKind kind, size_t eachTestCaseIter =
     std::cout << std::endl;
 }
 
-void runXsumAutoBenchmarkWithAdd1(XSUM::XsumKind kind, size_t eachTestCaseIter = DEFAULT_EACT_TEST_CASE_ITERATION) {
-    std::cout << std::format("### XsumAuto({}) add1() benchmark with {} iteration for each test case",
-                             getXsumKindName(kind), eachTestCaseIter)
+void runXsumAutoBenchmarkWithAdd1(size_t eachTestCaseIter = DEFAULT_EACT_TEST_CASE_ITERATION) {
+    std::cout << std::format("### XsumAuto add1() benchmark with {} iteration for each test case", eachTestCaseIter)
               << std::endl;
     for (auto &arr : arrList) {
         auto start = std::chrono::high_resolution_clock::now();
         for (size_t i = 0; i < eachTestCaseIter; ++i) {
-            XSUM::XsumAuto xauto{kind};
+            XSUM::XsumAuto xauto;
             for (const auto &ele : arr) {
                 xauto.add1(ele);
             }

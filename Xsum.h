@@ -54,6 +54,8 @@ class XsumSmall final {
     void addv(const std::span<const double> vec);
     void add1(double value);
     double computeRound();
+    size_t getSizeCount();
+    XsumSmallAccumulator transferAccumulator();
 
   private:
     XsumSmallAccumulator m_sacc;
@@ -62,6 +64,7 @@ class XsumSmall final {
 class XsumLarge final {
   public:
     explicit XsumLarge();
+    explicit XsumLarge(XsumSmall &&xsumsmall);
     ~XsumLarge() = default;
 
     void addv(const std::span<const double> vec);
@@ -72,37 +75,27 @@ class XsumLarge final {
     XsumLargeAccumulator m_lacc;
 };
 
-enum class XsumKind : short { XsumSmall, XsumLarge };
-
 class XsumAuto final {
   public:
     explicit XsumAuto();
-    explicit XsumAuto(size_t expectedInputSize);
-    explicit XsumAuto(XsumKind kind);
-    ~XsumAuto() = default;
+    ~XsumAuto();
 
     void addv(const std::span<const double> vec);
     void add1(double value);
     double computeRound();
+    inline void transformToLarge();
 
   private:
-    using XsumVariant = std::variant<XsumSmall, XsumLarge>;
-    XsumVariant m_acc;
+    enum class XsumType : short { XsumSmall, XsumLarge };
+    XsumType m_xsumType;
+
+    union Xsum {
+        XsumSmall m_xsmall;
+        XsumLarge m_xlarge;
+
+        Xsum() {}
+        ~Xsum() {}
+    } m_xsum;
 };
-
-namespace {
-
-template <typename T>
-concept XsumInterface = requires(T x, const std::span<const double> Vec, double Value) {
-    { x.addv(Vec) } -> std::same_as<void>;
-    { x.add1(Value) } -> std::same_as<void>;
-    { x.computeRound() } -> std::same_as<double>;
-};
-
-static_assert(XsumInterface<XsumSmall>, "XsumSmall does not satisfy XsumInterface");
-static_assert(XsumInterface<XsumLarge>, "XsumLarge does not satisfy XsumInterface");
-static_assert(XsumInterface<XsumAuto>, "XsumAuto does not satisfy XsumInterface");
-
-} // namespace
 
 } // namespace XSUM

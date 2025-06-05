@@ -24,7 +24,7 @@ void sameValue(const std::vector<double> &vec, double expected) {
     const auto xlargeRes = xlarge.computeRound();
     isValid(xlargeRes, expected);
 
-    XSUM::XsumAuto xauto{vec.size()};
+    XSUM::XsumAuto xauto;
     xauto.addv(vec);
     const auto xautoRes = xauto.computeRound();
     isValid(xautoRes, expected);
