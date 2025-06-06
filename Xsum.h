@@ -83,19 +83,20 @@ class XsumAuto final {
     void addv(const std::span<const double> vec);
     void add1(double value);
     double computeRound();
-    inline void transformToLarge();
 
   private:
     enum class XsumType : short { XsumSmall, XsumLarge };
     XsumType m_xsumType;
 
-    union Xsum {
+    union XsumKind {
         XsumSmall m_xsmall;
         XsumLarge m_xlarge;
 
-        Xsum() {}
-        ~Xsum() {}
-    } m_xsum;
+        XsumKind() {}
+        ~XsumKind() {}
+    } m_xsumKind;
+
+    void transformToLarge();
 };
 
 } // namespace XSUM

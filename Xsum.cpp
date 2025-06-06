@@ -29,7 +29,7 @@ constexpr int64_t XSUM_LCOUNT_BITS = 64 - XSUM_MANTISSA_BITS; // # of bits in co
 constexpr int64_t XSUM_LCHUNKS = 1 << (XSUM_EXP_BITS + 1);    // # of chunks in large accumulator
 
 // CONSTANTS DEFINING THE XsumAuto
-constexpr size_t XSUM_THRESHOLD = 1000;
+constexpr size_t XSUM_THRESHOLD = 1'000;
 
 // XsumSmallAccumulator
 XsumSmallAccumulator::XsumSmallAccumulator()
@@ -784,16 +784,16 @@ double XsumLarge::computeRound() {
 // XsumAuto
 
 XsumAuto::XsumAuto() : m_xsumType{XSUM::XsumAuto::XsumType::XsumSmall} {
-    new (&m_xsum.m_xsmall) XsumSmall();
+    new (&m_xsumKind.m_xsmall) XsumSmall();
 }
 
 XsumAuto::~XsumAuto() {
     switch (m_xsumType) {
         case XSUM::XsumAuto::XsumType::XsumSmall:
-            m_xsum.m_xsmall.~XsumSmall();
+            m_xsumKind.m_xsmall.~XsumSmall();
             break;
         case XSUM::XsumAuto::XsumType::XsumLarge:
-            m_xsum.m_xlarge.~XsumLarge();
+            m_xsumKind.m_xlarge.~XsumLarge();
             break;
     }
 }
@@ -801,11 +801,11 @@ XsumAuto::~XsumAuto() {
 void XsumAuto::addv(const std::span<const double> vec) {
     switch (m_xsumType) {
         case XSUM::XsumAuto::XsumType::XsumSmall:
-            m_xsum.m_xsmall.addv(vec);
+            m_xsumKind.m_xsmall.addv(vec);
             transformToLarge();
             break;
         case XSUM::XsumAuto::XsumType::XsumLarge:
-            m_xsum.m_xlarge.addv(vec);
+            m_xsumKind.m_xlarge.addv(vec);
             break;
     }
 }
@@ -813,11 +813,11 @@ void XsumAuto::addv(const std::span<const double> vec) {
 void XsumAuto::add1(double value) {
     switch (m_xsumType) {
         case XSUM::XsumAuto::XsumType::XsumSmall:
-            m_xsum.m_xsmall.add1(value);
+            m_xsumKind.m_xsmall.add1(value);
             transformToLarge();
             break;
         case XSUM::XsumAuto::XsumType::XsumLarge:
-            m_xsum.m_xlarge.add1(value);
+            m_xsumKind.m_xlarge.add1(value);
             break;
     }
 }
@@ -825,18 +825,18 @@ void XsumAuto::add1(double value) {
 double XsumAuto::computeRound() {
     switch (m_xsumType) {
         case XSUM::XsumAuto::XsumType::XsumSmall:
-            return m_xsum.m_xsmall.computeRound();
+            return m_xsumKind.m_xsmall.computeRound();
         case XSUM::XsumAuto::XsumType::XsumLarge:
-            return m_xsum.m_xlarge.computeRound();
+            return m_xsumKind.m_xlarge.computeRound();
     }
 }
 
-inline void XsumAuto::transformToLarge() {
-    if (m_xsumType == XSUM::XsumAuto::XsumType::XsumSmall && m_xsum.m_xsmall.getSizeCount() > XSUM_THRESHOLD) {
+void XsumAuto::transformToLarge() {
+    if (m_xsumType == XSUM::XsumAuto::XsumType::XsumSmall && m_xsumKind.m_xsmall.getSizeCount() > XSUM_THRESHOLD) {
         m_xsumType = XSUM::XsumAuto::XsumType::XsumLarge;
-        XsumSmall xsmall = std::move(m_xsum.m_xsmall);
-        m_xsum.m_xsmall.~XsumSmall();
-        new (&m_xsum.m_xlarge) XsumLarge{std::move(xsmall)};
+        XsumSmall xsmall = std::move(m_xsumKind.m_xsmall);
+        m_xsumKind.m_xsmall.~XsumSmall();
+        new (&m_xsumKind.m_xlarge) XsumLarge{std::move(xsmall)};
     }
 }
 
